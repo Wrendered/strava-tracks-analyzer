@@ -107,7 +107,7 @@ def display_track_map(gpx_data, stretches, wind_direction, estimated_wind=None):
     ne = gpx_data[['latitude', 'longitude']].max().values.tolist()
     m.fit_bounds([sw, ne])
     
-    # Add legend
+    # Add legend with explanations
     legend_html = f'''
     <div style="position: fixed; bottom: 50px; left: 50px; z-index: 1000; background-color: white; 
     padding: 10px; border: 2px solid grey; border-radius: 5px;">
@@ -119,6 +119,11 @@ def display_track_map(gpx_data, stretches, wind_direction, estimated_wind=None):
     <p><i style="background: lightgray; width: 20px; height: 2px; display: inline-block;"></i> Full Track</p>
     <p><b>Wind Direction:</b> {wind_direction}°</p>
     {f'<p><b>Estimated Wind:</b> {estimated_wind:.1f}°</p>' if estimated_wind is not None else ''}
+    <hr/>
+    <p><b>Note:</b> Wind angles are degrees <i>off the wind direction</i></p>
+    <p>- Upwind: <45° ideal for pointing, <90° total</p>
+    <p>- Downwind: >90° running, ~180° directly away</p>
+    <p>- Port/Starboard: tack relative to wind</p>
     </div>
     '''
     m.get_root().html.add_child(folium.Element(legend_html))
@@ -155,9 +160,19 @@ def plot_polar_diagram(stretches, wind_direction):
     ax.set_theta_zero_location('N')  # 0 degrees at the top
     ax.set_theta_direction(-1)  # clockwise
     
-    # Add wind direction label
-    ax.text(0, -0.1, "INTO WIND", ha='center', va='center', transform=ax.transAxes, fontweight='bold')
-    ax.text(0.5, -0.1, "DOWNWIND", ha='center', va='center', transform=ax.transAxes, fontweight='bold')
+    # Add wind direction and angle explanations
+    ax.text(0, -0.1, "INTO WIND (0°)", ha='center', va='center', transform=ax.transAxes, fontweight='bold')
+    ax.text(0.5, -0.1, "DOWNWIND (180°)", ha='center', va='center', transform=ax.transAxes, fontweight='bold')
+    
+    # Add explanations for port and starboard (left and right)
+    ax.text(0.25, -0.1, "PORT TACK", ha='center', va='center', transform=ax.transAxes, color='red')
+    ax.text(0.75, -0.1, "STARBOARD TACK", ha='center', va='center', transform=ax.transAxes, color='blue')
+    
+    # Add annotations for important angles
+    ax.text(np.radians(45), max_r * 1.05, "45°", ha='center', va='center', color='red')
+    ax.text(np.radians(135), max_r * 1.05, "135°", ha='center', va='center', color='orange')
+    ax.text(np.radians(225), max_r * 1.05, "225°", ha='center', va='center', color='purple')
+    ax.text(np.radians(315), max_r * 1.05, "315°", ha='center', va='center', color='blue')
     
     # Add radial labels (speed in knots)
     if len(r) > 0:
@@ -168,7 +183,9 @@ def plot_polar_diagram(stretches, wind_direction):
         ax.set_rlim(0, max_r * 1.1)
         ax.grid(True)
     
-    ax.set_title('Polar Performance Plot (Speed in Knots)', va='bottom')
+    ax.set_title('Polar Performance Plot (Speed in Knots vs Angle to Wind)', va='bottom')
+    plt.figtext(0.5, 0.01, "Angles show degrees off wind, color indicates wind angle (0-180°)", 
+               ha='center', fontsize=10, wrap=True)
     plt.tight_layout()
     
     return fig

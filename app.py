@@ -145,6 +145,18 @@ def main():
                             else:
                                 st.info("Not enough data for polar plot")
                         
+                        # Display explanation of angles
+                        st.subheader("Wind Angle Explanation")
+                        st.markdown("""
+                        The angles shown below are measured as **degrees off the wind direction**:
+                        - **0°** means sailing directly into the wind (impossible)
+                        - **45°** is a typical upwind angle
+                        - **90°** is sailing across the wind (beam reach)
+                        - **180°** is sailing directly downwind
+                        
+                        Smaller angles are better for upwind performance, larger angles are better for downwind.
+                        """)
+                        
                         # Display upwind/downwind analysis
                         st.subheader("Wind Angle Analysis")
                         upwind = stretches[stretches['angle_to_wind'] < 90]
@@ -162,15 +174,18 @@ def main():
                                     
                                     if not port.empty:
                                         best_port = port.loc[port['angle_to_wind'].idxmin()]
-                                        st.metric("Best Port Upwind", 
-                                                f"{best_port['angle_to_wind']:.1f}°", 
+                                        # For upwind, smaller angle to wind is better
+                                        st.metric("Best Port Upwind Angle", 
+                                                f"{best_port['angle_to_wind']:.1f}° off wind", 
                                                 f"{best_port['speed']:.1f} knots")
+                                        st.caption(f"Bearing: {best_port['bearing']:.1f}°")
                                     
                                     if not starboard.empty:
                                         best_stbd = starboard.loc[starboard['angle_to_wind'].idxmin()]
-                                        st.metric("Best Starboard Upwind", 
-                                                f"{best_stbd['angle_to_wind']:.1f}°", 
+                                        st.metric("Best Starboard Upwind Angle", 
+                                                f"{best_stbd['angle_to_wind']:.1f}° off wind", 
                                                 f"{best_stbd['speed']:.1f} knots")
+                                        st.caption(f"Bearing: {best_stbd['bearing']:.1f}°")
                                 else:
                                     st.info("No upwind data detected")
                             
@@ -183,15 +198,18 @@ def main():
                                     
                                     if not port.empty:
                                         best_port = port.loc[port['angle_to_wind'].idxmax()]
-                                        st.metric("Best Port Downwind", 
-                                                f"{best_port['angle_to_wind']:.1f}°", 
+                                        # For downwind, larger angle to wind is better
+                                        st.metric("Best Port Downwind Angle", 
+                                                f"{best_port['angle_to_wind']:.1f}° off wind", 
                                                 f"{best_port['speed']:.1f} knots")
+                                        st.caption(f"Bearing: {best_port['bearing']:.1f}°")
                                     
                                     if not starboard.empty:
                                         best_stbd = starboard.loc[starboard['angle_to_wind'].idxmax()]
-                                        st.metric("Best Starboard Downwind", 
-                                                f"{best_stbd['angle_to_wind']:.1f}°", 
+                                        st.metric("Best Starboard Downwind Angle", 
+                                                f"{best_stbd['angle_to_wind']:.1f}° off wind", 
                                                 f"{best_stbd['speed']:.1f} knots")
+                                        st.caption(f"Bearing: {best_stbd['bearing']:.1f}°")
                                 else:
                                     st.info("No downwind data detected")
                         
@@ -202,15 +220,27 @@ def main():
                         
                         # Display data table
                         st.subheader(f"Detected Segments ({len(stretches)})")
+                        
+                        # Create a DataFrame with renamed columns for clarity
                         display_cols = ['sailing_type', 'bearing', 'angle_to_wind', 
                                       'distance', 'speed', 'duration']
+                        
                         display_df = stretches[display_cols].copy()
                         
+                        # Rename columns to be clearer
+                        display_df = display_df.rename(columns={
+                            'bearing': 'heading (°)',
+                            'angle_to_wind': 'angle off wind (°)',
+                            'distance': 'distance (m)',
+                            'speed': 'speed (knots)',
+                            'duration': 'duration (sec)'
+                        })
+                        
                         # Format for display
-                        for col in ['bearing', 'angle_to_wind']:
+                        for col in ['heading (°)', 'angle off wind (°)']:
                             display_df[col] = display_df[col].round(1)
-                        display_df['distance'] = display_df['distance'].round(1)
-                        display_df['speed'] = display_df['speed'].round(2)
+                        display_df['distance (m)'] = display_df['distance (m)'].round(1)
+                        display_df['speed (knots)'] = display_df['speed (knots)'].round(2)
                         
                         st.dataframe(display_df)
                         

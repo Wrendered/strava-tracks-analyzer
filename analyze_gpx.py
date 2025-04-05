@@ -76,6 +76,12 @@ def analyze_file(file_path, wind_direction=None, angle_tolerance=10,
     print(f"\nAnalysis Results (Wind Direction: {wind_direction}°)")
     print(f"Found {len(stretches)} consistent segments")
     
+    # Explanation of wind angles
+    print("\nWind Angle Explanation:")
+    print("  Angles are measured as degrees off the wind direction")
+    print("  0° = directly into the wind, 45° = typical upwind, 90° = across, 180° = downwind")
+    print("  Smaller angles are better for upwind, larger angles are better for downwind")
+    
     # Upwind analysis
     upwind = stretches[stretches['angle_to_wind'] < 90]
     downwind = stretches[stretches['angle_to_wind'] >= 90]
@@ -87,11 +93,13 @@ def analyze_file(file_path, wind_direction=None, angle_tolerance=10,
         
         if not port.empty:
             best_port = port.loc[port['angle_to_wind'].idxmin()]
-            print(f"  Best Port Upwind: {best_port['angle_to_wind']:.1f}° @ {best_port['speed']:.1f} knots")
+            print(f"  Best Port Upwind Angle: {best_port['angle_to_wind']:.1f}° off wind @ {best_port['speed']:.1f} knots")
+            print(f"    Bearing: {best_port['bearing']:.1f}°")
         
         if not starboard.empty:
             best_stbd = starboard.loc[starboard['angle_to_wind'].idxmin()]
-            print(f"  Best Starboard Upwind: {best_stbd['angle_to_wind']:.1f}° @ {best_stbd['speed']:.1f} knots")
+            print(f"  Best Starboard Upwind Angle: {best_stbd['angle_to_wind']:.1f}° off wind @ {best_stbd['speed']:.1f} knots")
+            print(f"    Bearing: {best_stbd['bearing']:.1f}°")
     
     if not downwind.empty:
         print("\nDownwind Performance:")
@@ -100,11 +108,13 @@ def analyze_file(file_path, wind_direction=None, angle_tolerance=10,
         
         if not port.empty:
             best_port = port.loc[port['angle_to_wind'].idxmax()]
-            print(f"  Best Port Downwind: {best_port['angle_to_wind']:.1f}° @ {best_port['speed']:.1f} knots")
+            print(f"  Best Port Downwind Angle: {best_port['angle_to_wind']:.1f}° off wind @ {best_port['speed']:.1f} knots")
+            print(f"    Bearing: {best_port['bearing']:.1f}°")
         
         if not starboard.empty:
             best_stbd = starboard.loc[starboard['angle_to_wind'].idxmax()]
-            print(f"  Best Starboard Downwind: {best_stbd['angle_to_wind']:.1f}° @ {best_stbd['speed']:.1f} knots")
+            print(f"  Best Starboard Downwind Angle: {best_stbd['angle_to_wind']:.1f}° off wind @ {best_stbd['speed']:.1f} knots")
+            print(f"    Bearing: {best_stbd['bearing']:.1f}°")
     
     # Save data if requested
     print(f"\nFull data for {len(stretches)} segments:")
