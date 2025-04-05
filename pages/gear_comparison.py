@@ -22,17 +22,45 @@ from utils.analysis import find_consistent_angle_stretches, analyze_wind_angles,
 from utils.visualization import plot_bearing_distribution, plot_polar_diagram
 
 
-def create_side_by_side_polars(gear1_stretches, gear2_stretches, gear1_name, gear2_name, wind_direction1, wind_direction2):
-    """Create side-by-side polar plots for comparison."""
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 7), subplot_kw={'projection': 'polar'})
+def create_combined_polars(gear1_stretches, gear2_stretches, gear1_name, gear2_name, wind_direction1, wind_direction2):
+    """Create port/starboard polar half-circles with both gear on each plot for direct comparison."""
+    fig, (ax_port, ax_starboard) = plt.subplots(1, 2, figsize=(14, 7), subplot_kw={'projection': 'polar'})
     
     plt.suptitle(f"Gear Comparison: {gear1_name} vs {gear2_name}", fontsize=16)
     
-    # Plot Gear 1 on the left
-    plot_gear_polar(ax1, gear1_stretches, gear1_name, wind_direction1)
+    # Define colors for each gear
+    gear1_color = 'red'
+    gear2_color = 'blue'
     
-    # Plot Gear 2 on the right
-    plot_gear_polar(ax2, gear2_stretches, gear2_name, wind_direction2)
+    # Get maximum speeds to make scales consistent
+    max_speeds = []
+    
+    # Calculate max speeds from both gears
+    if not gear1_stretches.empty:
+        max_speeds.append(gear1_stretches['speed'].max())
+    if not gear2_stretches.empty:
+        max_speeds.append(gear2_stretches['speed'].max())
+    
+    # Set a default max_r if no data
+    max_r = max(max_speeds) if max_speeds else 20
+    
+    # Plot PORT tack data (LEFT PLOT)
+    plot_port_polar(
+        ax_port, gear1_stretches, gear2_stretches, 
+        gear1_name, gear2_name, 
+        gear1_color, gear2_color,
+        wind_direction1, wind_direction2,
+        max_r
+    )
+    
+    # Plot STARBOARD tack data (RIGHT PLOT)
+    plot_starboard_polar(
+        ax_starboard, gear1_stretches, gear2_stretches, 
+        gear1_name, gear2_name, 
+        gear1_color, gear2_color,
+        wind_direction1, wind_direction2,
+        max_r
+    )
     
     # Add explanatory text with better spacing
     plt.figtext(0.5, 0.01, 
@@ -41,6 +69,14 @@ def create_side_by_side_polars(gear1_stretches, gear2_stretches, gear1_name, gea
                "Marker size indicates distance sailed at this angle/speed combination.",
                ha='center', fontsize=9, wrap=True)
     
+    # Add legend for the gear types
+    from matplotlib.lines import Line2D
+    legend_elements = [
+        Line2D([0], [0], marker='o', color='w', markerfacecolor=gear1_color, markersize=8, label=gear1_name),
+        Line2D([0], [0], marker='o', color='w', markerfacecolor=gear2_color, markersize=8, label=gear2_name)
+    ]
+    fig.legend(handles=legend_elements, loc='upper center', bbox_to_anchor=(0.5, 0.05), ncol=2)
+    
     # Adjust layout
     plt.tight_layout()
     plt.subplots_adjust(bottom=0.15)
@@ -48,63 +84,8 @@ def create_side_by_side_polars(gear1_stretches, gear2_stretches, gear1_name, gea
     return fig
 
 
-def plot_gear_polar(ax, stretches, gear_name, wind_direction):
-    """Plot a polar diagram for a single gear on the given axis."""
-    if stretches.empty:
-        ax.set_title(f"{gear_name}: No data", fontweight='bold', pad=15)
-        return
-    
-    # Get data ready
-    port_mask = stretches['tack'] == 'Port'
-    starboard_mask = stretches['tack'] == 'Starboard'
-    
-    # Create a colormap for upwind/downwind
-    cmap = plt.cm.coolwarm
-    
-    max_speeds = []
-    
-    # Plot PORT tack data
-    if sum(port_mask) > 0:
-        port_data = stretches[port_mask].copy()
-        
-        # Get values
-        thetas = np.radians(port_data['angle_to_wind'].values)
-        r = port_data['speed'].values  # Speed in knots
-        weights = port_data['distance'].values
-        max_speeds.append(max(r) if len(r) > 0 else 0)
-        
-        # Normalize weights for scatter size
-        norm_weights = 20 * weights / weights.max() + 10 if weights.max() > 0 else 10
-        
-        # Plot the port tack points
-        ax.scatter(
-            thetas, r, 
-            c=port_data['angle_to_wind'], 
-            cmap=cmap, s=norm_weights, alpha=0.8, 
-            vmin=0, vmax=180, marker='o'
-        )
-    
-    # Plot STARBOARD tack data
-    if sum(starboard_mask) > 0:
-        starboard_data = stretches[starboard_mask].copy()
-        
-        # Get values
-        thetas = np.radians(starboard_data['angle_to_wind'].values)
-        r = starboard_data['speed'].values  # Speed in knots
-        weights = starboard_data['distance'].values
-        max_speeds.append(max(r) if len(r) > 0 else 0)
-        
-        # Normalize weights for scatter size
-        norm_weights = 20 * weights / weights.max() + 10 if weights.max() > 0 else 10
-        
-        # Plot the starboard tack points
-        ax.scatter(
-            thetas, r, 
-            c=starboard_data['angle_to_wind'], 
-            cmap=cmap, s=norm_weights, alpha=0.8, 
-            vmin=0, vmax=180, marker='s'
-        )
-    
+def plot_port_polar(ax, gear1_stretches, gear2_stretches, gear1_name, gear2_name, gear1_color, gear2_color, wind_direction1, wind_direction2, max_r):
+    """Plot port tack data for both gears on the same axis."""
     # Set up the polar plot
     ax.set_theta_zero_location('N')  # 0 degrees at the top
     ax.set_theta_direction(-1)  # clockwise
@@ -113,40 +94,101 @@ def plot_gear_polar(ax, stretches, gear_name, wind_direction):
     ax.set_thetamin(0)
     ax.set_thetamax(180)
     
-    # Get max speed and set consistent scaling
-    if max_speeds:
-        max_r = max(max_speeds)
-        
-        # Set consistent speed rings
-        radii = np.linspace(0, np.ceil(max_r), 6)
-        ax.set_rticks(radii)
-        ax.set_rlim(0, np.ceil(max_r) * 1.1)
-        
-        # Add important angle reference lines
-        angles = [0, 45, 90, 135, 180]
-        labels = ["0°", "45°", "90°", "135°", "180°"]
-        linestyles = [':', '--', '-', '--', ':']
-        colors = ['black', 'red', 'green', 'orange', 'black']
-        
-        for angle, label, ls, color in zip(angles, labels, linestyles, colors):
-            # Add radial lines at important angles
-            ax.plot([np.radians(angle), np.radians(angle)], [0, max_r * 1.1], 
-                    ls=ls, color=color, alpha=0.5, linewidth=1)
-            
-            # Add angle labels just outside the plot
-            ax.text(np.radians(angle), max_r * 1.07, label, 
-                    ha='center', va='center', color=color, fontsize=9)
+    # Set consistent speed rings
+    radii = np.linspace(0, np.ceil(max_r), 6)
+    ax.set_rticks(radii)
+    ax.set_rlim(0, np.ceil(max_r) * 1.1)
     
-    # Add legend for port/starboard
-    from matplotlib.lines import Line2D
-    legend_elements = [
-        Line2D([0], [0], marker='o', color='w', markerfacecolor='grey', markersize=8, label='Port'),
-        Line2D([0], [0], marker='s', color='w', markerfacecolor='grey', markersize=8, label='Starboard')
-    ]
-    ax.legend(handles=legend_elements, loc='upper right')
+    # Filter for Port tack data for both gears
+    if not gear1_stretches.empty:
+        port_data1 = gear1_stretches[gear1_stretches['tack'] == 'Port'].copy()
+        plot_tack_data(ax, port_data1, gear1_color, marker='o', alpha=0.7)
     
-    # Add title with gear name and wind direction
-    ax.set_title(f"{gear_name}\nWind: {wind_direction}°", fontweight='bold', pad=15)
+    if not gear2_stretches.empty:
+        port_data2 = gear2_stretches[gear2_stretches['tack'] == 'Port'].copy()
+        plot_tack_data(ax, port_data2, gear2_color, marker='o', alpha=0.7)
+    
+    # Add important angle reference lines
+    angles = [0, 45, 90, 135, 180]
+    labels = ["0°", "45°", "90°", "135°", "180°"]
+    linestyles = [':', '--', '-', '--', ':']
+    colors = ['black', 'red', 'green', 'orange', 'black']
+    
+    for angle, label, ls, color in zip(angles, labels, linestyles, colors):
+        # Add radial lines at important angles
+        ax.plot([np.radians(angle), np.radians(angle)], [0, max_r * 1.1], 
+                ls=ls, color=color, alpha=0.5, linewidth=1)
+        
+        # Add angle labels just outside the plot
+        ax.text(np.radians(angle), max_r * 1.07, label, 
+                ha='center', va='center', color=color, fontsize=9)
+    
+    # Add title
+    ax.set_title('Port Tack', fontweight='bold', pad=15)
+
+
+def plot_starboard_polar(ax, gear1_stretches, gear2_stretches, gear1_name, gear2_name, gear1_color, gear2_color, wind_direction1, wind_direction2, max_r):
+    """Plot starboard tack data for both gears on the same axis."""
+    # Set up the polar plot
+    ax.set_theta_zero_location('N')  # 0 degrees at the top
+    ax.set_theta_direction(-1)  # clockwise
+    
+    # Set the theta limits to 0-180 degrees (only show the top half)
+    ax.set_thetamin(0)
+    ax.set_thetamax(180)
+    
+    # Set consistent speed rings
+    radii = np.linspace(0, np.ceil(max_r), 6)
+    ax.set_rticks(radii)
+    ax.set_rlim(0, np.ceil(max_r) * 1.1)
+    
+    # Filter for Starboard tack data for both gears
+    if not gear1_stretches.empty:
+        starboard_data1 = gear1_stretches[gear1_stretches['tack'] == 'Starboard'].copy()
+        plot_tack_data(ax, starboard_data1, gear1_color, marker='s', alpha=0.7)
+    
+    if not gear2_stretches.empty:
+        starboard_data2 = gear2_stretches[gear2_stretches['tack'] == 'Starboard'].copy()
+        plot_tack_data(ax, starboard_data2, gear2_color, marker='s', alpha=0.7)
+    
+    # Add important angle reference lines
+    angles = [0, 45, 90, 135, 180]
+    labels = ["0°", "45°", "90°", "135°", "180°"]
+    linestyles = [':', '--', '-', '--', ':']
+    colors = ['black', 'red', 'green', 'orange', 'black']
+    
+    for angle, label, ls, color in zip(angles, labels, linestyles, colors):
+        # Add radial lines at important angles
+        ax.plot([np.radians(angle), np.radians(angle)], [0, max_r * 1.1], 
+                ls=ls, color=color, alpha=0.5, linewidth=1)
+        
+        # Add angle labels just outside the plot
+        ax.text(np.radians(angle), max_r * 1.07, label, 
+                ha='center', va='center', color=color, fontsize=9)
+    
+    # Add title
+    ax.set_title('Starboard Tack', fontweight='bold', pad=15)
+
+
+def plot_tack_data(ax, tack_data, color, marker='o', alpha=0.7):
+    """Plot data points for a specific tack and gear."""
+    if tack_data.empty:
+        return
+    
+    # Get values
+    thetas = np.radians(tack_data['angle_to_wind'].values)
+    r = tack_data['speed'].values  # Speed in knots
+    weights = tack_data['distance'].values
+    
+    # Normalize weights for scatter size
+    norm_weights = 20 * weights / weights.max() + 10 if weights.max() > 0 else 10
+    
+    # Plot the points
+    ax.scatter(
+        thetas, r, 
+        color=color, s=norm_weights, alpha=alpha, 
+        marker=marker, edgecolors='none'
+    )
 
 
 def create_polar_comparison_section(stretches1, stretches2, gear1_name, gear2_name, wind_direction1, wind_direction2):
@@ -202,7 +244,7 @@ def create_polar_comparison_section(stretches1, stretches2, gear1_name, gear2_na
     
     # Plot the comparative polar diagram
     st.write("### Polar Performance Comparison")
-    fig = create_side_by_side_polars(
+    fig = create_combined_polars(
         stretches1, stretches2, gear1_name, gear2_name, wind_direction1, wind_direction2
     )
     st.pyplot(fig)
@@ -564,15 +606,34 @@ def create_comparison_table(stretches1, stretches2, gear1_name, gear2_name):
 def process_gpx_file(uploaded_file, angle_tolerance, min_duration, min_distance, min_speed_ms, active_speed_threshold):
     """Process a GPX file and return stretches for analysis with estimated wind direction."""
     try:
-        gpx_data = load_gpx_file(uploaded_file)
+        gpx_result = load_gpx_file(uploaded_file)
+        
+        # Handle both old and new return formats
+        if isinstance(gpx_result, tuple):
+            gpx_data, metadata = gpx_result
+        else:
+            gpx_data = gpx_result
+            metadata = {'name': None}
+        
         logger.info(f"Loaded GPX file with {len(gpx_data)} points")
+        
+        # Extract track name from metadata or filename
+        if metadata.get('name'):
+            track_name = metadata['name']
+        elif hasattr(uploaded_file, 'name'):
+            # Use the filename without extension
+            filename = os.path.basename(uploaded_file.name)
+            track_name = os.path.splitext(filename)[0]
+        else:
+            track_name = "Unknown Track"
+            
     except Exception as e:
         logger.error(f"Error loading GPX file: {str(e)}")
         st.error(f"Error loading GPX file: {str(e)}")
-        return pd.DataFrame(), None, None
+        return pd.DataFrame(), None, None, None, "Unknown Track"
     
     if gpx_data.empty:
-        return pd.DataFrame(), None, None
+        return pd.DataFrame(), None, None, None, track_name
     
     # Calculate basic track metrics
     metrics = calculate_track_metrics(gpx_data, min_speed_knots=active_speed_threshold)
@@ -583,13 +644,13 @@ def process_gpx_file(uploaded_file, angle_tolerance, min_duration, min_distance,
     )
     
     if stretches.empty:
-        return pd.DataFrame(), None, None
+        return pd.DataFrame(), None, None, None, track_name
     
     # Filter by minimum speed
     stretches = stretches[stretches['speed'] >= min_speed_ms]
     
     if stretches.empty:
-        return pd.DataFrame(), None, None
+        return pd.DataFrame(), None, None, None, track_name
     
     # Try to estimate wind direction
     try:
@@ -615,7 +676,7 @@ def process_gpx_file(uploaded_file, angle_tolerance, min_duration, min_distance,
     # Calculate angles relative to wind
     stretches = analyze_wind_angles(stretches, estimated_wind)
     
-    return stretches, metrics, estimated_wind, wind_message
+    return stretches, metrics, estimated_wind, wind_message, track_name
 
 
 def st_main():
@@ -669,13 +730,15 @@ def st_main():
     
     with col1:
         st.subheader("Gear 1")
-        gear1_name = st.text_input("Gear 1 Name", "5m Wing, 85L Board")
         gear1_file = st.file_uploader("Upload GPX for Gear 1", type=["gpx"])
+        gear1_name_default = "Gear 1"
+        gear1_name = st.text_input("Gear 1 Name (Optional)", "", placeholder="Auto-detected from GPX if available")
     
     with col2:
         st.subheader("Gear 2")
-        gear2_name = st.text_input("Gear 2 Name", "4m Wing, 90L Board")
         gear2_file = st.file_uploader("Upload GPX for Gear 2", type=["gpx"])
+        gear2_name_default = "Gear 2"
+        gear2_name = st.text_input("Gear 2 Name (Optional)", "", placeholder="Auto-detected from GPX if available")
     
     # Process files and create comparison
     if gear1_file and gear2_file:
@@ -692,21 +755,31 @@ def st_main():
             )
             
             # Unpack results
-            if len(gear1_result) == 4:
-                gear1_stretches, gear1_metrics, gear1_wind, gear1_wind_msg = gear1_result
+            if len(gear1_result) == 5:
+                gear1_stretches, gear1_metrics, gear1_wind, gear1_wind_msg, gear1_auto_name = gear1_result
+                gear1_display_name = gear1_name if gear1_name.strip() else gear1_auto_name
             else:
-                gear1_stretches, gear1_metrics, gear1_wind = gear1_result
-                gear1_wind_msg = "No wind direction detected"
+                # Handle older return format for backward compatibility
+                gear1_stretches = gear1_result[0]
+                gear1_metrics = gear1_result[1] if len(gear1_result) > 1 else None
+                gear1_wind = gear1_result[2] if len(gear1_result) > 2 else 90
+                gear1_wind_msg = gear1_result[3] if len(gear1_result) > 3 else "No wind direction detected"
+                gear1_display_name = gear1_name if gear1_name.strip() else gear1_name_default
                 
-            if len(gear2_result) == 4:
-                gear2_stretches, gear2_metrics, gear2_wind, gear2_wind_msg = gear2_result
+            if len(gear2_result) == 5:
+                gear2_stretches, gear2_metrics, gear2_wind, gear2_wind_msg, gear2_auto_name = gear2_result
+                gear2_display_name = gear2_name if gear2_name.strip() else gear2_auto_name
             else:
-                gear2_stretches, gear2_metrics, gear2_wind = gear2_result
-                gear2_wind_msg = "No wind direction detected"
+                # Handle older return format for backward compatibility
+                gear2_stretches = gear2_result[0]
+                gear2_metrics = gear2_result[1] if len(gear2_result) > 1 else None
+                gear2_wind = gear2_result[2] if len(gear2_result) > 2 else 90
+                gear2_wind_msg = gear2_result[3] if len(gear2_result) > 3 else "No wind direction detected"
+                gear2_display_name = gear2_name if gear2_name.strip() else gear2_name_default
             
             # Display wind direction messages
-            st.info(f"Gear 1 ({gear1_name}): {gear1_wind_msg}")
-            st.info(f"Gear 2 ({gear2_name}): {gear2_wind_msg}")
+            st.info(f"Gear 1 ({gear1_display_name}): {gear1_wind_msg}")
+            st.info(f"Gear 2 ({gear2_display_name}): {gear2_wind_msg}")
             
             # If manual wind direction was specified
             if not wind_autodetect and 'wind_direction' in locals():
@@ -718,7 +791,7 @@ def st_main():
             if not gear1_stretches.empty and not gear2_stretches.empty:
                 create_polar_comparison_section(
                     gear1_stretches, gear2_stretches, 
-                    gear1_name, gear2_name, 
+                    gear1_display_name, gear2_display_name, 
                     gear1_wind, gear2_wind
                 )
             else:
@@ -741,13 +814,14 @@ def st_main():
         
         1. Upload GPX files from two different sessions with different gear
         2. Automatically detect wind direction from each file (recommended)
-        3. View side-by-side polar plots showing the performance of each setup
+        3. Compare port and starboard performance side-by-side
         4. See detailed metrics and head-to-head comparisons
         
         **Tips for best results:**
         * Use tracks from similar locations/conditions
         * Ensure both tracks have sufficient data (upwind and downwind sailing)
         * Let the system auto-detect wind direction for each track separately
+        * The gear name will be auto-detected from your GPX files when possible
         """)
 
 
