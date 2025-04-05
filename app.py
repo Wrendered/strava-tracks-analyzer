@@ -34,9 +34,35 @@ def main():
     # Main title for the app
     st.title("Strava Tracks Analyzer")
     
-    # Initialize session state for navigation if it doesn't exist
+    # Initialize session state for navigation and data persistence
     if 'page' not in st.session_state:
         st.session_state.page = "Track Analysis"
+        
+    # Initialize data storage in session state if not already present
+    if 'track_data' not in st.session_state:
+        st.session_state.track_data = None
+        
+    if 'track_metrics' not in st.session_state:
+        st.session_state.track_metrics = None
+        
+    if 'track_stretches' not in st.session_state:
+        st.session_state.track_stretches = None
+        
+    if 'track_name' not in st.session_state:
+        st.session_state.track_name = None
+        
+    if 'wind_direction' not in st.session_state:
+        st.session_state.wind_direction = 90
+        
+    if 'estimated_wind' not in st.session_state:
+        st.session_state.estimated_wind = None
+        
+    # For gear comparison page
+    if 'gear1_data' not in st.session_state:
+        st.session_state.gear1_data = None
+        
+    if 'gear2_data' not in st.session_state:
+        st.session_state.gear2_data = None
     
     # Add navigation tabs at the top of the main content
     tabs = ["📊 Track Analysis", "🔄 Gear Comparison"]
@@ -61,7 +87,7 @@ def main():
 
 
 def single_track_analysis():
-    """Original single track analysis page"""
+    """Single track analysis page with session state persistence"""
     st.header("Track Analysis")
     st.markdown("Analyze your wingfoil tracks to improve performance")
     
@@ -83,19 +109,24 @@ def single_track_analysis():
             key="wind_mode_radio"
         )
         
+        # Update wind mode in session state
+        st.session_state.wind_mode = wind_mode
+        
         # Wind direction input or display
         if wind_mode == "Manual":
             wind_direction = st.number_input(
                 "Wind Direction (°)", 
                 min_value=0, 
                 max_value=359, 
-                value=90,
+                value=int(st.session_state.wind_direction) if st.session_state.wind_direction is not None else 90,
                 help="Direction the wind is coming FROM (0-359°)"
             )
+            # Save to session state
+            st.session_state.wind_direction = wind_direction
             auto_detect_wind = False
         else:
             st.info("Wind direction will be automatically estimated from your track data")
-            wind_direction = 90  # Default value if auto-detection fails
+            wind_direction = st.session_state.wind_direction
             auto_detect_wind = True
             
             # Add manual override option
@@ -104,10 +135,11 @@ def single_track_analysis():
                     "Override Wind Direction (°)", 
                     min_value=0, 
                     max_value=359, 
-                    value=wind_direction
+                    value=int(st.session_state.wind_direction)
                 )
                 if st.button("Use Override Value"):
                     wind_direction = manual_wind
+                    st.session_state.wind_direction = wind_direction
                     auto_detect_wind = False
         
         # Segment detection parameters
@@ -162,8 +194,20 @@ def single_track_analysis():
             use_simple_method = True  # Default to simple method
     
     # File uploader
-    uploaded_file = st.file_uploader("Upload a GPX file", type=['gpx'])
+    uploaded_file = st.file_uploader("Upload a GPX file", type=['gpx'], key="track_analysis_uploader")
     
+    # Button to clear data
+    if st.session_state.track_data is not None:
+        if st.button("Clear Current Data", key="clear_track_data"):
+            st.session_state.track_data = None
+            st.session_state.track_metrics = None
+            st.session_state.track_stretches = None
+            st.session_state.track_name = None
+            st.session_state.wind_direction = 90
+            st.session_state.estimated_wind = None
+            st.experimental_rerun()
+    
+    # Process new file upload or use session state data
     if uploaded_file is not None:
         logger.info(f"Processing uploaded file: {uploaded_file.name}")
         with st.spinner("Processing GPX data..."):
@@ -179,226 +223,253 @@ def single_track_analysis():
                     gpx_data = gpx_result
                     track_name = 'Unknown Track'
                     
+                # Store in session state
+                st.session_state.track_data = gpx_data
+                st.session_state.track_name = track_name
+                
                 logger.info(f"Loaded GPX file with {len(gpx_data)} points")
             except Exception as e:
                 logger.error(f"Error loading GPX file: {e}")
                 st.error(f"Error loading GPX file: {e}")
                 gpx_data = pd.DataFrame()
+                st.session_state.track_data = None
+                st.session_state.track_name = None
+    elif st.session_state.track_data is not None:
+        # Use data from session state
+        gpx_data = st.session_state.track_data
+        track_name = st.session_state.track_name
+        st.info(f"Using previously loaded data: {track_name}")
+    else:
+        gpx_data = pd.DataFrame()
+    
+    # Calculate basic track metrics with active speed filter
+    if not gpx_data.empty:
+        metrics = calculate_track_metrics(gpx_data, min_speed_knots=active_speed_threshold)
+        # Store metrics in session state
+        st.session_state.track_metrics = metrics
+        
+        # Display track summary
+        col1, col2 = st.columns(2)
+        with col1:
+            st.subheader(f"Track Summary: {track_name}")
+            st.write(f"📅 Date: {metrics['date']}")
+            st.write(f"⏱️ Total Duration: {metrics['duration']}")
             
-            # Calculate basic track metrics with active speed filter
-            if not gpx_data.empty:
-                metrics = calculate_track_metrics(gpx_data, min_speed_knots=active_speed_threshold)
+            # Show active metrics if available
+            if 'active_duration' in metrics:
+                active_percent = (metrics['active_duration'].total_seconds() / metrics['total_duration_seconds']) * 100 if metrics['total_duration_seconds'] > 0 else 0
+                st.write(f"⏱️ Active Duration: {metrics['active_duration']} ({active_percent:.1f}%)")
+        
+        with col2:
+            st.metric("📏 Total Distance", f"{metrics['distance']:.2f} km")
+            
+            # Show weighted average speed (active only)
+            if 'weighted_avg_speed' in metrics:
+                st.metric("⚡ Active Average Speed", f"{metrics['weighted_avg_speed']:.2f} knots", 
+                         help=f"Average speed when moving above {active_speed_threshold} knots")
+            else:
+                st.metric("⚡ Average Speed", f"{metrics['avg_speed']:.2f} knots")
+            
+            # Show comparison if different
+            if 'overall_avg_speed' in metrics and abs(metrics['overall_avg_speed'] - metrics['weighted_avg_speed']) > 0.1:
+                st.caption(f"Overall average (including stops): {metrics['overall_avg_speed']:.2f} knots")
+        
+        # Find consistent angle stretches
+        stretches = find_consistent_angle_stretches(
+            gpx_data, angle_tolerance, min_duration, min_distance
+        )
+        
+        if not stretches.empty:
+            # Filter by minimum speed
+            stretches = stretches[stretches['speed'] >= min_speed_ms]
+            
+            if not stretches.empty:
+                # Save to session state
+                st.session_state.track_stretches = stretches
                 
-                # Display track summary
+                # Always try to estimate wind direction for comparison
+                estimated_wind = None
+                try:
+                    estimated_wind = estimate_wind_direction(stretches, use_simple_method=use_simple_method)
+                    if estimated_wind is not None:
+                        logger.info(f"Estimated wind direction: {estimated_wind:.1f}° (using {'simple' if use_simple_method else 'complex'} method)")
+                        
+                        # Save to session state
+                        st.session_state.estimated_wind = estimated_wind
+                        
+                        # If auto-detect is on, use the estimated wind
+                        if auto_detect_wind:
+                            # Display success and use the estimated value
+                            wind_direction = estimated_wind
+                            st.session_state.wind_direction = wind_direction
+                            st.sidebar.success(f"Using estimated wind direction: {estimated_wind:.1f}°")
+                            
+                            # Offer option to adjust the estimated wind
+                            with st.sidebar:
+                                adjusted_wind = st.slider(
+                                    "Fine-tune Wind Direction", 
+                                    min_value=max(0, int(estimated_wind) - 20),
+                                    max_value=min(359, int(estimated_wind) + 20),
+                                    value=int(estimated_wind)
+                                )
+                                if adjusted_wind != int(estimated_wind):
+                                    wind_direction = adjusted_wind
+                                    st.session_state.wind_direction = wind_direction
+                        else:
+                            # In manual mode, just show the estimated value for comparison
+                            st.sidebar.info(f"Estimated wind direction: {estimated_wind:.1f}°")
+                    else:
+                        if auto_detect_wind:
+                            logger.warning("Could not estimate wind direction, using default")
+                            st.sidebar.warning("Could not estimate wind direction")
+                except Exception as e:
+                    logger.error(f"Error estimating wind direction: {e}")
+                    if auto_detect_wind:
+                        st.sidebar.error(f"Error estimating wind direction")
+                
+                # If we're using auto but couldn't estimate, fall back to default
+                if auto_detect_wind and estimated_wind is None:
+                    # We keep the default or manually overridden value of wind_direction
+                    pass
+                
+                # Calculate angles relative to wind
+                stretches = analyze_wind_angles(stretches, wind_direction)
+                
+                # Save the analyzed stretches to session state
+                st.session_state.track_stretches = stretches
+                
+                # Display visualization and analysis
                 col1, col2 = st.columns(2)
+                
+                # When displaying the map, pass the estimated wind:
                 with col1:
-                    st.subheader(f"Track Summary: {track_name}")
-                    st.write(f"📅 Date: {metrics['date']}")
-                    st.write(f"⏱️ Total Duration: {metrics['duration']}")
-                    
-                    # Show active metrics if available
-                    if 'active_duration' in metrics:
-                        active_percent = (metrics['active_duration'].total_seconds() / metrics['total_duration_seconds']) * 100 if metrics['total_duration_seconds'] > 0 else 0
-                        st.write(f"⏱️ Active Duration: {metrics['active_duration']} ({active_percent:.1f}%)")
+                    # Display map
+                    st.subheader("Track Map")
+                    display_track_map(gpx_data, stretches, wind_direction, estimated_wind)
                 
                 with col2:
-                    st.metric("📏 Total Distance", f"{metrics['distance']:.2f} km")
-                    
-                    # Show weighted average speed (active only)
-                    if 'weighted_avg_speed' in metrics:
-                        st.metric("⚡ Active Average Speed", f"{metrics['weighted_avg_speed']:.2f} knots", 
-                                 help=f"Average speed when moving above {active_speed_threshold} knots")
-                    else:
-                        st.metric("⚡ Average Speed", f"{metrics['avg_speed']:.2f} knots")
-                    
-                    # Show comparison if different
-                    if 'overall_avg_speed' in metrics and abs(metrics['overall_avg_speed'] - metrics['weighted_avg_speed']) > 0.1:
-                        st.caption(f"Overall average (including stops): {metrics['overall_avg_speed']:.2f} knots")
-                
-                # Find consistent angle stretches
-                stretches = find_consistent_angle_stretches(
-                    gpx_data, angle_tolerance, min_duration, min_distance
-                )
-                
-                if not stretches.empty:
-                    # Filter by minimum speed
-                    stretches = stretches[stretches['speed'] >= min_speed_ms]
-                    
-                    if not stretches.empty:
-                        # Always try to estimate wind direction for comparison
-                        estimated_wind = None
-                        try:
-                            estimated_wind = estimate_wind_direction(stretches, use_simple_method=use_simple_method)
-                            if estimated_wind is not None:
-                                logger.info(f"Estimated wind direction: {estimated_wind:.1f}° (using {'simple' if use_simple_method else 'complex'} method)")
-                                
-                                # If auto-detect is on, use the estimated wind
-                                if auto_detect_wind:
-                                    # Display success and use the estimated value
-                                    wind_direction = estimated_wind
-                                    st.sidebar.success(f"Using estimated wind direction: {estimated_wind:.1f}°")
-                                    
-                                    # Offer option to adjust the estimated wind
-                                    with st.sidebar:
-                                        adjusted_wind = st.slider(
-                                            "Fine-tune Wind Direction", 
-                                            min_value=max(0, int(estimated_wind) - 20),
-                                            max_value=min(359, int(estimated_wind) + 20),
-                                            value=int(estimated_wind)
-                                        )
-                                        if adjusted_wind != int(estimated_wind):
-                                            wind_direction = adjusted_wind
-                                else:
-                                    # In manual mode, just show the estimated value for comparison
-                                    st.sidebar.info(f"Estimated wind direction: {estimated_wind:.1f}°")
-                            else:
-                                if auto_detect_wind:
-                                    logger.warning("Could not estimate wind direction, using default")
-                                    st.sidebar.warning("Could not estimate wind direction")
-                        except Exception as e:
-                            logger.error(f"Error estimating wind direction: {e}")
-                            if auto_detect_wind:
-                                st.sidebar.error(f"Error estimating wind direction")
-                                
-                        # If we're using auto but couldn't estimate, fall back to default
-                        if auto_detect_wind and estimated_wind is None:
-                            # We keep the default or manually overridden value of wind_direction
-                            pass
-                        
-                        # Calculate angles relative to wind
-                        stretches = analyze_wind_angles(stretches, wind_direction)
-                        
-                        # Display visualization and analysis
-                        col1, col2 = st.columns(2)
-                        
-                        # When displaying the map, pass the estimated wind:
-                        with col1:
-                            # Display map
-                            st.subheader("Track Map")
-                            display_track_map(gpx_data, stretches, wind_direction, estimated_wind)
-                        
-                        with col2:
-                            # Display polar plot
-                            st.subheader("Polar Performance")
-                            if len(stretches) > 2:
-                                fig = plot_polar_diagram(stretches, wind_direction)
-                                st.pyplot(fig)
-                            else:
-                                st.info("Not enough data for polar plot")
-                        
-                        # Display explanation of angles
-                        st.subheader("Wind Angle Explanation")
-                        st.markdown("""
-                        The angles shown below are measured as **degrees off the wind direction**:
-                        - **0°** means sailing directly into the wind (impossible)
-                        - **45°** is a typical upwind angle
-                        - **90°** is sailing across the wind (beam reach)
-                        - **180°** is sailing directly downwind
-                        
-                        Smaller angles are better for upwind performance, larger angles are better for downwind.
-                        """)
-                        
-                        # Display upwind/downwind analysis
-                        st.subheader("Wind Angle Analysis")
-                        upwind = stretches[stretches['angle_to_wind'] < 90]
-                        downwind = stretches[stretches['angle_to_wind'] >= 90]
-                        
-                        if not upwind.empty or not downwind.empty:
-                            col1, col2 = st.columns(2)
-                            
-                            with col1:
-                                st.markdown("#### Upwind Performance")
-                                if not upwind.empty:
-                                    # Display upwind stats
-                                    port = upwind[upwind['tack'] == 'Port']
-                                    starboard = upwind[upwind['tack'] == 'Starboard']
-                                    
-                                    if not port.empty:
-                                        best_port = port.loc[port['angle_to_wind'].idxmin()]
-                                        # For upwind, smaller angle to wind is better
-                                        st.metric("Best Port Upwind Angle", 
-                                                f"{best_port['angle_to_wind']:.1f}° off wind", 
-                                                f"{best_port['speed']:.1f} knots")
-                                        st.caption(f"Bearing: {best_port['bearing']:.1f}°")
-                                    
-                                    if not starboard.empty:
-                                        best_stbd = starboard.loc[starboard['angle_to_wind'].idxmin()]
-                                        st.metric("Best Starboard Upwind Angle", 
-                                                f"{best_stbd['angle_to_wind']:.1f}° off wind", 
-                                                f"{best_stbd['speed']:.1f} knots")
-                                        st.caption(f"Bearing: {best_stbd['bearing']:.1f}°")
-                                else:
-                                    st.info("No upwind data detected")
-                            
-                            with col2:
-                                st.markdown("#### Downwind Performance")
-                                if not downwind.empty:
-                                    # Display downwind stats
-                                    port = downwind[downwind['tack'] == 'Port']
-                                    starboard = downwind[downwind['tack'] == 'Starboard']
-                                    
-                                    if not port.empty:
-                                        best_port = port.loc[port['angle_to_wind'].idxmax()]
-                                        # For downwind, larger angle to wind is better
-                                        st.metric("Best Port Downwind Angle", 
-                                                f"{best_port['angle_to_wind']:.1f}° off wind", 
-                                                f"{best_port['speed']:.1f} knots")
-                                        st.caption(f"Bearing: {best_port['bearing']:.1f}°")
-                                    
-                                    if not starboard.empty:
-                                        best_stbd = starboard.loc[starboard['angle_to_wind'].idxmax()]
-                                        st.metric("Best Starboard Downwind Angle", 
-                                                f"{best_stbd['angle_to_wind']:.1f}° off wind", 
-                                                f"{best_stbd['speed']:.1f} knots")
-                                        st.caption(f"Bearing: {best_stbd['bearing']:.1f}°")
-                                else:
-                                    st.info("No downwind data detected")
-                        
-                        # Plot bearing distribution
-                        st.subheader("Bearing Distribution")
-                        fig = plot_bearing_distribution(stretches, wind_direction)
+                    # Display polar plot
+                    st.subheader("Polar Performance")
+                    if len(stretches) > 2:
+                        fig = plot_polar_diagram(stretches, wind_direction)
                         st.pyplot(fig)
-                        
-                        # Display data table
-                        st.subheader(f"Detected Segments ({len(stretches)})")
-                        
-                        # Create a DataFrame with renamed columns for clarity
-                        display_cols = ['sailing_type', 'bearing', 'angle_to_wind', 
-                                      'distance', 'speed', 'duration']
-                        
-                        display_df = stretches[display_cols].copy()
-                        
-                        # Rename columns to be clearer
-                        display_df = display_df.rename(columns={
-                            'bearing': 'heading (°)',
-                            'angle_to_wind': 'angle off wind (°)',
-                            'distance': 'distance (m)',
-                            'speed': 'speed (knots)',
-                            'duration': 'duration (sec)'
-                        })
-                        
-                        # Format for display
-                        for col in ['heading (°)', 'angle off wind (°)']:
-                            display_df[col] = display_df[col].round(1)
-                        display_df['distance (m)'] = display_df['distance (m)'].round(1)
-                        display_df['speed (knots)'] = display_df['speed (knots)'].round(2)
-                        
-                        st.dataframe(display_df)
-                        
-                        # Data download
-                        csv = stretches.to_csv(index=False)
-                        st.download_button(
-                            "Download Analysis as CSV",
-                            data=csv,
-                            file_name="wingfoil_analysis.csv",
-                            mime="text/csv",
-                        )
                     else:
-                        st.warning("No segments meet minimum speed criteria.")
-                else:
-                    st.warning("No consistent angle segments found. Try adjusting parameters.")
+                        st.info("Not enough data for polar plot")
+                
+                # Display explanation of angles
+                st.subheader("Wind Angle Explanation")
+                st.markdown("""
+                The angles shown below are measured as **degrees off the wind direction**:
+                - **0°** means sailing directly into the wind (impossible)
+                - **45°** is a typical upwind angle
+                - **90°** is sailing across the wind (beam reach)
+                - **180°** is sailing directly downwind
+                
+                Smaller angles are better for upwind performance, larger angles are better for downwind.
+                """)
+                
+                # Display upwind/downwind analysis
+                st.subheader("Wind Angle Analysis")
+                upwind = stretches[stretches['angle_to_wind'] < 90]
+                downwind = stretches[stretches['angle_to_wind'] >= 90]
+                
+                if not upwind.empty or not downwind.empty:
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        st.markdown("#### Upwind Performance")
+                        if not upwind.empty:
+                            # Display upwind stats
+                            port = upwind[upwind['tack'] == 'Port']
+                            starboard = upwind[upwind['tack'] == 'Starboard']
+                            
+                            if not port.empty:
+                                best_port = port.loc[port['angle_to_wind'].idxmin()]
+                                # For upwind, smaller angle to wind is better
+                                st.metric("Best Port Upwind Angle", 
+                                        f"{best_port['angle_to_wind']:.1f}° off wind", 
+                                        f"{best_port['speed']:.1f} knots")
+                                st.caption(f"Bearing: {best_port['bearing']:.1f}°")
+                            
+                            if not starboard.empty:
+                                best_stbd = starboard.loc[starboard['angle_to_wind'].idxmin()]
+                                st.metric("Best Starboard Upwind Angle", 
+                                        f"{best_stbd['angle_to_wind']:.1f}° off wind", 
+                                        f"{best_stbd['speed']:.1f} knots")
+                                st.caption(f"Bearing: {best_stbd['bearing']:.1f}°")
+                        else:
+                            st.info("No upwind data detected")
+                    
+                    with col2:
+                        st.markdown("#### Downwind Performance")
+                        if not downwind.empty:
+                            # Display downwind stats
+                            port = downwind[downwind['tack'] == 'Port']
+                            starboard = downwind[downwind['tack'] == 'Starboard']
+                            
+                            if not port.empty:
+                                best_port = port.loc[port['angle_to_wind'].idxmax()]
+                                # For downwind, larger angle to wind is better
+                                st.metric("Best Port Downwind Angle", 
+                                        f"{best_port['angle_to_wind']:.1f}° off wind", 
+                                        f"{best_port['speed']:.1f} knots")
+                                st.caption(f"Bearing: {best_port['bearing']:.1f}°")
+                            
+                            if not starboard.empty:
+                                best_stbd = starboard.loc[starboard['angle_to_wind'].idxmax()]
+                                st.metric("Best Starboard Downwind Angle", 
+                                        f"{best_stbd['angle_to_wind']:.1f}° off wind", 
+                                        f"{best_stbd['speed']:.1f} knots")
+                                st.caption(f"Bearing: {best_stbd['bearing']:.1f}°")
+                        else:
+                            st.info("No downwind data detected")
+                
+                # Plot bearing distribution
+                st.subheader("Bearing Distribution")
+                fig = plot_bearing_distribution(stretches, wind_direction)
+                st.pyplot(fig)
+                
+                # Display data table
+                st.subheader(f"Detected Segments ({len(stretches)})")
+                
+                # Create a DataFrame with renamed columns for clarity
+                display_cols = ['sailing_type', 'bearing', 'angle_to_wind', 
+                              'distance', 'speed', 'duration']
+                
+                display_df = stretches[display_cols].copy()
+                
+                # Rename columns to be clearer
+                display_df = display_df.rename(columns={
+                    'bearing': 'heading (°)',
+                    'angle_to_wind': 'angle off wind (°)',
+                    'distance': 'distance (m)',
+                    'speed': 'speed (knots)',
+                    'duration': 'duration (sec)'
+                })
+                
+                # Format for display
+                for col in ['heading (°)', 'angle off wind (°)']:
+                    display_df[col] = display_df[col].round(1)
+                display_df['distance (m)'] = display_df['distance (m)'].round(1)
+                display_df['speed (knots)'] = display_df['speed (knots)'].round(2)
+                
+                st.dataframe(display_df)
+                
+                # Data download
+                csv = stretches.to_csv(index=False)
+                st.download_button(
+                    "Download Analysis as CSV",
+                    data=csv,
+                    file_name="wingfoil_analysis.csv",
+                    mime="text/csv",
+                )
             else:
-                st.error("Unable to parse GPX data. Check file format.")
+                st.warning("No segments meet minimum speed criteria.")
+        else:
+            st.warning("No consistent angle segments found. Try adjusting parameters.")
+    else:
+        if uploaded_file is not None:
+            st.error("Unable to parse GPX data. Check file format.")
 
 if __name__ == "__main__":
     main()

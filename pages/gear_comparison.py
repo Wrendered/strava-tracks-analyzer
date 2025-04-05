@@ -684,17 +684,61 @@ def st_main():
     st.header("Gear Comparison")
     st.markdown("Compare performance between different gear types")
     
+    # Initialize session state for gear comparison
+    if 'gear1_data' not in st.session_state:
+        st.session_state.gear1_data = None
+        
+    if 'gear1_name' not in st.session_state:
+        st.session_state.gear1_name = None
+        
+    if 'gear1_stretches' not in st.session_state:
+        st.session_state.gear1_stretches = None
+        
+    if 'gear1_wind' not in st.session_state:
+        st.session_state.gear1_wind = None
+        
+    if 'gear2_data' not in st.session_state:
+        st.session_state.gear2_data = None
+        
+    if 'gear2_name' not in st.session_state:
+        st.session_state.gear2_name = None
+        
+    if 'gear2_stretches' not in st.session_state:
+        st.session_state.gear2_stretches = None
+        
+    if 'gear2_wind' not in st.session_state:
+        st.session_state.gear2_wind = None
+        
+    if 'gear_wind_autodetect' not in st.session_state:
+        st.session_state.gear_wind_autodetect = True
+    
     # Common settings for both files
     with st.sidebar:
         st.header("Gear Comparison Parameters")
+        
+        # Add button to clear gear data
+        if st.session_state.gear1_data is not None or st.session_state.gear2_data is not None:
+            if st.button("Clear All Gear Data"):
+                st.session_state.gear1_data = None
+                st.session_state.gear1_name = None
+                st.session_state.gear1_stretches = None
+                st.session_state.gear1_wind = None
+                st.session_state.gear2_data = None
+                st.session_state.gear2_name = None
+                st.session_state.gear2_stretches = None
+                st.session_state.gear2_wind = None
+                st.experimental_rerun()
         
         # Wind direction auto-detection
         st.subheader("Wind Direction")
         wind_autodetect = st.checkbox(
             "Auto-detect Wind Direction (recommended)", 
-            value=True,
+            value=st.session_state.gear_wind_autodetect,
             help="Automatically estimate wind direction from track data (recommended for comparison)"
         )
+        
+        # Update in session state
+        st.session_state.gear_wind_autodetect = wind_autodetect
         
         # Show the manual wind input if auto-detect is off
         if not wind_autodetect:
@@ -731,80 +775,167 @@ def st_main():
     
     with col1:
         st.subheader("Gear 1")
-        gear1_file = st.file_uploader("Upload GPX for Gear 1", type=["gpx"])
+        gear1_file = st.file_uploader("Upload GPX for Gear 1", type=["gpx"], key="gear1_uploader")
         gear1_name_default = "Gear 1"
-        gear1_name = st.text_input("Gear 1 Name (Optional)", "", placeholder="Auto-detected from GPX if available")
+        gear1_name_input = st.text_input(
+            "Gear 1 Name (Optional)", 
+            value=st.session_state.gear1_name if st.session_state.gear1_name else "",
+            placeholder="Auto-detected from GPX if available",
+            key="gear1_name_input"
+        )
+        
+        # Show clear button for individual gear
+        if st.session_state.gear1_data is not None:
+            if st.button("Clear Gear 1 Data", key="clear_gear1"):
+                st.session_state.gear1_data = None
+                st.session_state.gear1_name = None
+                st.session_state.gear1_stretches = None
+                st.session_state.gear1_wind = None
+                st.experimental_rerun()
     
     with col2:
         st.subheader("Gear 2")
-        gear2_file = st.file_uploader("Upload GPX for Gear 2", type=["gpx"])
+        gear2_file = st.file_uploader("Upload GPX for Gear 2", type=["gpx"], key="gear2_uploader")
         gear2_name_default = "Gear 2"
-        gear2_name = st.text_input("Gear 2 Name (Optional)", "", placeholder="Auto-detected from GPX if available")
+        gear2_name_input = st.text_input(
+            "Gear 2 Name (Optional)", 
+            value=st.session_state.gear2_name if st.session_state.gear2_name else "",
+            placeholder="Auto-detected from GPX if available",
+            key="gear2_name_input"
+        )
+        
+        # Show clear button for individual gear
+        if st.session_state.gear2_data is not None:
+            if st.button("Clear Gear 2 Data", key="clear_gear2"):
+                st.session_state.gear2_data = None
+                st.session_state.gear2_name = None
+                st.session_state.gear2_stretches = None
+                st.session_state.gear2_wind = None
+                st.experimental_rerun()
     
     # Process files and create comparison
-    if gear1_file and gear2_file:
-        with st.spinner("Processing GPX files..."):
-            # Process both files
-            gear1_result = process_gpx_file(
-                gear1_file, angle_tolerance, min_duration, 
-                min_distance, min_speed_ms, active_speed_threshold
-            )
-            
-            gear2_result = process_gpx_file(
-                gear2_file, angle_tolerance, min_duration,
-                min_distance, min_speed_ms, active_speed_threshold
-            )
-            
-            # Unpack results
-            if len(gear1_result) == 5:
-                gear1_stretches, gear1_metrics, gear1_wind, gear1_wind_msg, gear1_auto_name = gear1_result
-                gear1_display_name = gear1_name if gear1_name.strip() else gear1_auto_name
-            else:
-                # Handle older return format for backward compatibility
-                gear1_stretches = gear1_result[0]
-                gear1_metrics = gear1_result[1] if len(gear1_result) > 1 else None
-                gear1_wind = gear1_result[2] if len(gear1_result) > 2 else 90
-                gear1_wind_msg = gear1_result[3] if len(gear1_result) > 3 else "No wind direction detected"
-                gear1_display_name = gear1_name if gear1_name.strip() else gear1_name_default
-                
-            if len(gear2_result) == 5:
-                gear2_stretches, gear2_metrics, gear2_wind, gear2_wind_msg, gear2_auto_name = gear2_result
-                gear2_display_name = gear2_name if gear2_name.strip() else gear2_auto_name
-            else:
-                # Handle older return format for backward compatibility
-                gear2_stretches = gear2_result[0]
-                gear2_metrics = gear2_result[1] if len(gear2_result) > 1 else None
-                gear2_wind = gear2_result[2] if len(gear2_result) > 2 else 90
-                gear2_wind_msg = gear2_result[3] if len(gear2_result) > 3 else "No wind direction detected"
-                gear2_display_name = gear2_name if gear2_name.strip() else gear2_name_default
-            
-            # Display wind direction messages
-            st.info(f"Gear 1 ({gear1_display_name}): {gear1_wind_msg}")
-            st.info(f"Gear 2 ({gear2_display_name}): {gear2_wind_msg}")
-            
-            # If manual wind direction was specified
-            if not wind_autodetect and 'wind_direction' in locals():
-                gear1_wind = wind_direction
-                gear2_wind = wind_direction
-                st.warning(f"Using manual wind direction: {wind_direction}° for both tracks (not recommended)")
-            
-            # Display comparison if both files were processed successfully
-            if not gear1_stretches.empty and not gear2_stretches.empty:
-                create_polar_comparison_section(
-                    gear1_stretches, gear2_stretches, 
-                    gear1_display_name, gear2_display_name, 
-                    gear1_wind, gear2_wind
-                )
-            else:
-                if gear1_stretches.empty:
-                    st.error(f"Could not find any valid segments in {gear1_file.name}")
-                if gear2_stretches.empty:
-                    st.error(f"Could not find any valid segments in {gear2_file.name}")
+    # Check if we have new files to process or use existing data from session state
+    process_gear1 = gear1_file is not None
+    process_gear2 = gear2_file is not None
     
-    elif gear1_file:
-        st.info("Please upload a GPX file for Gear 2 to compare")
-    elif gear2_file:
-        st.info("Please upload a GPX file for Gear 1 to compare")
+    # Use session state data if available
+    if not process_gear1 and st.session_state.gear1_stretches is not None:
+        gear1_stretches = st.session_state.gear1_stretches
+        gear1_wind = st.session_state.gear1_wind
+        gear1_display_name = st.session_state.gear1_name
+        gear1_wind_msg = f"Using saved wind direction: {gear1_wind:.1f}°"
+        gear1_available = True
+    else:
+        gear1_available = process_gear1
+        
+    if not process_gear2 and st.session_state.gear2_stretches is not None:
+        gear2_stretches = st.session_state.gear2_stretches
+        gear2_wind = st.session_state.gear2_wind
+        gear2_display_name = st.session_state.gear2_name
+        gear2_wind_msg = f"Using saved wind direction: {gear2_wind:.1f}°"
+        gear2_available = True
+    else:
+        gear2_available = process_gear2
+    
+    # Process new files if needed
+    if process_gear1 or process_gear2:
+        with st.spinner("Processing GPX files..."):
+            if process_gear1:
+                # Process gear 1 file
+                gear1_result = process_gpx_file(
+                    gear1_file, angle_tolerance, min_duration, 
+                    min_distance, min_speed_ms, active_speed_threshold
+                )
+                
+                # Unpack results
+                if len(gear1_result) == 5:
+                    gear1_stretches, gear1_metrics, gear1_wind, gear1_wind_msg, gear1_auto_name = gear1_result
+                    # Use input name or auto-detected name
+                    gear1_display_name = gear1_name_input if gear1_name_input.strip() else gear1_auto_name
+                    # Store in session state
+                    st.session_state.gear1_stretches = gear1_stretches
+                    st.session_state.gear1_wind = gear1_wind
+                    st.session_state.gear1_name = gear1_display_name
+                    st.session_state.gear1_data = True
+                else:
+                    # Handle older return format for backward compatibility
+                    gear1_stretches = gear1_result[0]
+                    gear1_metrics = gear1_result[1] if len(gear1_result) > 1 else None
+                    gear1_wind = gear1_result[2] if len(gear1_result) > 2 else 90
+                    gear1_wind_msg = gear1_result[3] if len(gear1_result) > 3 else "No wind direction detected"
+                    gear1_display_name = gear1_name_input if gear1_name_input.strip() else gear1_name_default
+                    # Store in session state
+                    st.session_state.gear1_stretches = gear1_stretches
+                    st.session_state.gear1_wind = gear1_wind
+                    st.session_state.gear1_name = gear1_display_name
+                    st.session_state.gear1_data = True
+            
+            if process_gear2:
+                # Process gear 2 file
+                gear2_result = process_gpx_file(
+                    gear2_file, angle_tolerance, min_duration,
+                    min_distance, min_speed_ms, active_speed_threshold
+                )
+                
+                # Unpack results
+                if len(gear2_result) == 5:
+                    gear2_stretches, gear2_metrics, gear2_wind, gear2_wind_msg, gear2_auto_name = gear2_result
+                    # Use input name or auto-detected name
+                    gear2_display_name = gear2_name_input if gear2_name_input.strip() else gear2_auto_name
+                    # Store in session state
+                    st.session_state.gear2_stretches = gear2_stretches
+                    st.session_state.gear2_wind = gear2_wind
+                    st.session_state.gear2_name = gear2_display_name
+                    st.session_state.gear2_data = True
+                else:
+                    # Handle older return format for backward compatibility
+                    gear2_stretches = gear2_result[0]
+                    gear2_metrics = gear2_result[1] if len(gear2_result) > 1 else None
+                    gear2_wind = gear2_result[2] if len(gear2_result) > 2 else 90
+                    gear2_wind_msg = gear2_result[3] if len(gear2_result) > 3 else "No wind direction detected"
+                    gear2_display_name = gear2_name_input if gear2_name_input.strip() else gear2_name_default
+                    # Store in session state
+                    st.session_state.gear2_stretches = gear2_stretches
+                    st.session_state.gear2_wind = gear2_wind
+                    st.session_state.gear2_name = gear2_display_name
+                    st.session_state.gear2_data = True
+            
+    
+    # If we have both gear data available (either from new files or session state)
+    if (gear1_available and gear2_available) or (process_gear1 and process_gear2):
+        # Display wind direction messages
+        st.info(f"Gear 1 ({gear1_display_name}): {gear1_wind_msg}")
+        st.info(f"Gear 2 ({gear2_display_name}): {gear2_wind_msg}")
+        
+        # If manual wind direction was specified
+        if not wind_autodetect and 'wind_direction' in locals():
+            gear1_wind = wind_direction
+            gear2_wind = wind_direction
+            st.warning(f"Using manual wind direction: {wind_direction}° for both tracks (not recommended)")
+        
+        # Display comparison if both files were processed successfully
+        if not gear1_stretches.empty and not gear2_stretches.empty:
+            create_polar_comparison_section(
+                gear1_stretches, gear2_stretches, 
+                gear1_display_name, gear2_display_name, 
+                gear1_wind, gear2_wind
+            )
+        else:
+            if gear1_stretches.empty and process_gear1:
+                st.error(f"Could not find any valid segments in {gear1_file.name}")
+            elif gear1_stretches.empty:
+                st.error("No valid segments in Gear 1 data")
+                
+            if gear2_stretches.empty and process_gear2:
+                st.error(f"Could not find any valid segments in {gear2_file.name}")
+            elif gear2_stretches.empty:
+                st.error("No valid segments in Gear 2 data")
+    
+    # Handle cases where we only have one gear or no gears
+    elif gear1_available or process_gear1:
+        st.info("Please upload or select a GPX file for Gear 2 to compare")
+    elif gear2_available or process_gear2:
+        st.info("Please upload or select a GPX file for Gear 1 to compare")
     else:
         st.info("Upload GPX files for both gear types to see comparison")
         
