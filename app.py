@@ -23,47 +23,64 @@ from utils.visualization import display_track_map, plot_bearing_distribution, pl
 def main():
     st.set_page_config(
         layout="wide", 
-        page_title="Wingfoil Track Analyzer",
+        page_title="Strava Tracks Analyzer",
         page_icon="🪂",
         initial_sidebar_state="expanded",
         menu_items={
-            'About': "Wingfoil Track Analyzer - Analyze your wingfoil tracks to improve performance"
+            'About': "Strava Tracks Analyzer - Analyze your wingfoil tracks to improve performance"
         }
     )
     
-    # Add navigation
-    st.sidebar.header("Navigation")
-    page = st.sidebar.radio(
-        "Select Page",
-        ["Track Analysis", "Gear Comparison"],
-        index=0
-    )
+    # Main title for the app
+    st.title("Strava Tracks Analyzer")
     
-    if page == "Track Analysis":
+    # Initialize session state for navigation if it doesn't exist
+    if 'page' not in st.session_state:
+        st.session_state.page = "Track Analysis"
+    
+    # Add navigation tabs at the top of the main content
+    tabs = ["📊 Track Analysis", "🔄 Gear Comparison"]
+    selected_tab = st.radio("Navigation", tabs, horizontal=True, label_visibility="collapsed")
+    
+    # Load the gear comparison module once
+    from pages.gear_comparison import st_main as gear_comparison
+    
+    # Update session state based on selected tab
+    if selected_tab == "📊 Track Analysis":
+        st.session_state.page = "Track Analysis"
+    else:
+        st.session_state.page = "Gear Comparison"
+    
+    # Display content based on the selected tab
+    if st.session_state.page == "Track Analysis":
         single_track_analysis()
     else:
-        from pages.gear_comparison import st_main as gear_comparison
         gear_comparison()
     
-    logger.info(f"App started - {page} page")
+    logger.info(f"App started - {st.session_state.page} page")
 
 
 def single_track_analysis():
     """Original single track analysis page"""
-    st.title("Wingfoil Track Analyzer")
+    st.header("Track Analysis")
     st.markdown("Analyze your wingfoil tracks to improve performance")
     
     # Sidebar parameters
     with st.sidebar:
-        st.header("Analysis Parameters")
+        # Clean up sidebar by removing redundant headers
+        st.header("Track Analysis Parameters")
         
         # Wind direction section
         st.subheader("Wind Direction")
+        if 'wind_mode' not in st.session_state:
+            st.session_state.wind_mode = "Manual"
+            
         wind_mode = st.radio(
             "Wind Direction Mode",
             ["Manual", "Auto-detect"], 
-            index=0,
-            horizontal=True
+            index=0 if st.session_state.wind_mode == "Manual" else 1,
+            horizontal=True,
+            key="wind_mode_radio"
         )
         
         # Wind direction input or display
@@ -152,7 +169,16 @@ def single_track_analysis():
         with st.spinner("Processing GPX data..."):
             # Load GPX data
             try:
-                gpx_data = load_gpx_file(uploaded_file)
+                gpx_result = load_gpx_file(uploaded_file)
+                
+                # Handle both old and new return formats
+                if isinstance(gpx_result, tuple):
+                    gpx_data, metadata = gpx_result
+                    track_name = metadata.get('name', 'Unknown Track')
+                else:
+                    gpx_data = gpx_result
+                    track_name = 'Unknown Track'
+                    
                 logger.info(f"Loaded GPX file with {len(gpx_data)} points")
             except Exception as e:
                 logger.error(f"Error loading GPX file: {e}")
@@ -166,7 +192,7 @@ def single_track_analysis():
                 # Display track summary
                 col1, col2 = st.columns(2)
                 with col1:
-                    st.subheader("Track Summary")
+                    st.subheader(f"Track Summary: {track_name}")
                     st.write(f"📅 Date: {metrics['date']}")
                     st.write(f"⏱️ Total Duration: {metrics['duration']}")
                     

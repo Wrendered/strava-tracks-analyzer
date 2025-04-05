@@ -62,6 +62,15 @@ def create_combined_polars(gear1_stretches, gear2_stretches, gear1_name, gear2_n
         max_r
     )
     
+    # Add legend for the gear types
+    from matplotlib.lines import Line2D
+    legend_elements = [
+        Line2D([0], [0], marker='o', color='w', markerfacecolor=gear1_color, markersize=8, label=gear1_name),
+        Line2D([0], [0], marker='o', color='w', markerfacecolor=gear2_color, markersize=8, label=gear2_name)
+    ]
+    # Position the legend at the top to avoid overlapping with the text
+    fig.legend(handles=legend_elements, loc='upper center', bbox_to_anchor=(0.5, 0.96), ncol=2)
+    
     # Add explanatory text with better spacing
     plt.figtext(0.5, 0.01, 
                "These polar plots show speed (radius) at different angles to the wind.\n" +
@@ -69,17 +78,9 @@ def create_combined_polars(gear1_stretches, gear2_stretches, gear1_name, gear2_n
                "Marker size indicates distance sailed at this angle/speed combination.",
                ha='center', fontsize=9, wrap=True)
     
-    # Add legend for the gear types
-    from matplotlib.lines import Line2D
-    legend_elements = [
-        Line2D([0], [0], marker='o', color='w', markerfacecolor=gear1_color, markersize=8, label=gear1_name),
-        Line2D([0], [0], marker='o', color='w', markerfacecolor=gear2_color, markersize=8, label=gear2_name)
-    ]
-    fig.legend(handles=legend_elements, loc='upper center', bbox_to_anchor=(0.5, 0.05), ncol=2)
-    
-    # Adjust layout
+    # Adjust layout - increase bottom margin to give text more room
     plt.tight_layout()
-    plt.subplots_adjust(bottom=0.15)
+    plt.subplots_adjust(bottom=0.17, top=0.90)
     
     return fig
 
@@ -680,12 +681,12 @@ def process_gpx_file(uploaded_file, angle_tolerance, min_duration, min_distance,
 
 
 def st_main():
-    st.title("Gear Comparison")
+    st.header("Gear Comparison")
     st.markdown("Compare performance between different gear types")
     
     # Common settings for both files
     with st.sidebar:
-        st.header("Analysis Parameters")
+        st.header("Gear Comparison Parameters")
         
         # Wind direction auto-detection
         st.subheader("Wind Direction")
