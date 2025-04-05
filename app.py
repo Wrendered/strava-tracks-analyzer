@@ -32,13 +32,46 @@ def main():
     with st.sidebar:
         st.header("Analysis Parameters")
         
-        # Wind direction input
-        wind_direction = st.number_input("Wind Direction (°)", 
-                                        min_value=0, max_value=359, value=90,
-                                        help="Direction the wind is coming FROM")
+        # Wind direction section
+        st.subheader("Wind Direction")
+        wind_mode = st.radio(
+            "Wind Direction Mode",
+            ["Manual", "Auto-detect"], 
+            index=0,
+            horizontal=True
+        )
         
+        # Wind direction input or display
+        if wind_mode == "Manual":
+            wind_direction = st.number_input(
+                "Wind Direction (°)", 
+                min_value=0, 
+                max_value=359, 
+                value=90,
+                help="Direction the wind is coming FROM (0-359°)"
+            )
+            auto_detect_wind = False
+        else:
+            st.info("Wind direction will be automatically estimated from your track data")
+            wind_direction = 90  # Default value if auto-detection fails
+            auto_detect_wind = True
+            
+            # Add manual override option
+            if st.checkbox("Show manual override", value=False):
+                manual_wind = st.number_input(
+                    "Override Wind Direction (°)", 
+                    min_value=0, 
+                    max_value=359, 
+                    value=wind_direction
+                )
+                if st.button("Use Override Value"):
+                    wind_direction = manual_wind
+                    auto_detect_wind = False
+        
+        # Segment detection parameters
+        st.subheader("Segment Detection")
         angle_tolerance = st.slider("Angle Tolerance (°)", 
-                                    min_value=1, max_value=20, value=10)
+                                   min_value=1, max_value=20, value=10)
         
         # Minimum criteria
         min_duration = st.slider("Min Duration (sec)", min_value=1, max_value=60, value=10)
@@ -48,10 +81,9 @@ def main():
         min_speed_ms = min_speed * 0.514444  # Convert knots to m/s
         
         # Advanced options
-        st.subheader("Advanced")
-        auto_detect_wind = st.checkbox("Auto-detect wind direction", value=True)
+        st.subheader("Advanced Options")
         advanced_mode = st.checkbox("Advanced Mode", value=False, 
-                                    help="Enable advanced features and options")
+                                   help="Enable advanced features and options")
         
         if advanced_mode:
             wind_estimation_method = st.radio(
@@ -104,24 +136,44 @@ def main():
                     stretches = stretches[stretches['speed'] >= min_speed_ms]
                     
                     if not stretches.empty:
-                        # Try to estimate wind direction if requested
-                        if auto_detect_wind:
-                            try:
-                                estimated_wind = estimate_wind_direction(stretches, use_simple_method=use_simple_method)
-                                if estimated_wind is not None:
-                                    logger.info(f"Estimated wind direction: {estimated_wind:.1f}° (using {'simple' if use_simple_method else 'complex'} method)")
-                                    st.sidebar.success(f"Estimated wind direction: {estimated_wind:.1f}°")
-                                    if st.sidebar.button("Use Estimated Wind"):
-                                        wind_direction = estimated_wind
-                                        logger.info(f"Using estimated wind direction: {wind_direction:.1f}°")
-                                        st.experimental_rerun()
+                        # Always try to estimate wind direction for comparison
+                        estimated_wind = None
+                        try:
+                            estimated_wind = estimate_wind_direction(stretches, use_simple_method=use_simple_method)
+                            if estimated_wind is not None:
+                                logger.info(f"Estimated wind direction: {estimated_wind:.1f}° (using {'simple' if use_simple_method else 'complex'} method)")
+                                
+                                # If auto-detect is on, use the estimated wind
+                                if auto_detect_wind:
+                                    # Display success and use the estimated value
+                                    wind_direction = estimated_wind
+                                    st.sidebar.success(f"Using estimated wind direction: {estimated_wind:.1f}°")
+                                    
+                                    # Offer option to adjust the estimated wind
+                                    with st.sidebar:
+                                        adjusted_wind = st.slider(
+                                            "Fine-tune Wind Direction", 
+                                            min_value=max(0, int(estimated_wind) - 20),
+                                            max_value=min(359, int(estimated_wind) + 20),
+                                            value=int(estimated_wind)
+                                        )
+                                        if adjusted_wind != int(estimated_wind):
+                                            wind_direction = adjusted_wind
                                 else:
-                                    logger.warning("Could not estimate wind direction")
-                            except Exception as e:
-                                logger.error(f"Error estimating wind direction: {e}")
-                                estimated_wind = None
-                        else:
-                            estimated_wind = None
+                                    # In manual mode, just show the estimated value for comparison
+                                    st.sidebar.info(f"Estimated wind direction: {estimated_wind:.1f}°")
+                            else:
+                                if auto_detect_wind:
+                                    logger.warning("Could not estimate wind direction, using default")
+                                    st.sidebar.warning("Could not estimate wind direction")
+                        except Exception as e:
+                            logger.error(f"Error estimating wind direction: {e}")
+                            if auto_detect_wind:
+                                st.sidebar.error(f"Error estimating wind direction")
+                                
+                        # If we're using auto but couldn't estimate, fall back to default
+                        if auto_detect_wind and estimated_wind is None:
+                            # We keep the default or manually overridden value of wind_direction
 
                         
                         # Calculate angles relative to wind
