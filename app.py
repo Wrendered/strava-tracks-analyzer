@@ -21,12 +21,37 @@ from utils.analysis import find_consistent_angle_stretches, analyze_wind_angles,
 from utils.visualization import display_track_map, plot_bearing_distribution, plot_polar_diagram
 
 def main():
-    st.set_page_config(layout="wide", page_title="Wingfoil Track Analyzer")
+    st.set_page_config(
+        layout="wide", 
+        page_title="Wingfoil Track Analyzer",
+        page_icon="🪂",
+        initial_sidebar_state="expanded",
+        menu_items={
+            'About': "Wingfoil Track Analyzer - Analyze your wingfoil tracks to improve performance"
+        }
+    )
     
+    # Add navigation
+    st.sidebar.header("Navigation")
+    page = st.sidebar.radio(
+        "Select Page",
+        ["Track Analysis", "Gear Comparison"],
+        index=0
+    )
+    
+    if page == "Track Analysis":
+        single_track_analysis()
+    else:
+        from pages.gear_comparison import st_main as gear_comparison
+        gear_comparison()
+    
+    logger.info(f"App started - {page} page")
+
+
+def single_track_analysis():
+    """Original single track analysis page"""
     st.title("Wingfoil Track Analyzer")
     st.markdown("Analyze your wingfoil tracks to improve performance")
-    
-    logger.info("App started")
     
     # Sidebar parameters
     with st.sidebar:
