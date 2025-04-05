@@ -168,7 +168,10 @@ def plot_polar_diagram(stretches, wind_direction):
     ax.text(0.25, -0.1, "PORT TACK", ha='center', va='center', transform=ax.transAxes, color='red')
     ax.text(0.75, -0.1, "STARBOARD TACK", ha='center', va='center', transform=ax.transAxes, color='blue')
     
-    # Add annotations for important angles
+    # Calculate max radius for annotations
+    max_r = max(r) if len(r) > 0 else 1
+    
+    # Add annotations for important angles (after calculating max_r)
     ax.text(np.radians(45), max_r * 1.05, "45°", ha='center', va='center', color='red')
     ax.text(np.radians(135), max_r * 1.05, "135°", ha='center', va='center', color='orange')
     ax.text(np.radians(225), max_r * 1.05, "225°", ha='center', va='center', color='purple')
@@ -176,7 +179,6 @@ def plot_polar_diagram(stretches, wind_direction):
     
     # Add radial labels (speed in knots)
     if len(r) > 0:
-        max_r = max(r)
         radii = np.linspace(0, max(1, round(max_r)), 5)
         ax.set_rticks(radii)
         ax.set_rlabel_position(45)
