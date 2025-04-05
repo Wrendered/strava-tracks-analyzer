@@ -99,12 +99,12 @@ def single_track_analysis():
         # Wind direction section
         st.subheader("Wind Direction")
         if 'wind_mode' not in st.session_state:
-            st.session_state.wind_mode = "Manual"
+            st.session_state.wind_mode = "Auto-detect"  # Default to auto-detect
             
         wind_mode = st.radio(
             "Wind Direction Mode",
-            ["Manual", "Auto-detect"], 
-            index=0 if st.session_state.wind_mode == "Manual" else 1,
+            ["Auto-detect", "Manual"], 
+            index=0 if st.session_state.wind_mode == "Auto-detect" else 1,
             horizontal=True,
             key="wind_mode_radio"
         )
@@ -126,21 +126,23 @@ def single_track_analysis():
             auto_detect_wind = False
         else:
             st.info("Wind direction will be automatically estimated from your track data")
-            wind_direction = st.session_state.wind_direction
             auto_detect_wind = True
             
-            # Add manual override option
-            if st.checkbox("Show manual override", value=False):
-                manual_wind = st.number_input(
-                    "Override Wind Direction (°)", 
-                    min_value=0, 
-                    max_value=359, 
-                    value=int(st.session_state.wind_direction)
+            # If we already have an estimated wind direction, show the fine-tuning slider
+            if st.session_state.estimated_wind is not None:
+                estimated = st.session_state.estimated_wind
+                st.write(f"Estimated: {estimated:.1f}°")
+                adjusted_wind = st.slider(
+                    "Fine-tune Wind Direction", 
+                    min_value=max(0, int(estimated) - 20),
+                    max_value=min(359, int(estimated) + 20),
+                    value=int(st.session_state.wind_direction) if st.session_state.wind_direction is not None else int(estimated)
                 )
-                if st.button("Use Override Value"):
-                    wind_direction = manual_wind
-                    st.session_state.wind_direction = wind_direction
-                    auto_detect_wind = False
+                wind_direction = adjusted_wind
+                st.session_state.wind_direction = wind_direction
+            else:
+                # No estimate yet
+                wind_direction = st.session_state.wind_direction
         
         # Segment detection parameters
         st.subheader("Segment Detection")
@@ -303,18 +305,6 @@ def single_track_analysis():
                             wind_direction = estimated_wind
                             st.session_state.wind_direction = wind_direction
                             st.sidebar.success(f"Using estimated wind direction: {estimated_wind:.1f}°")
-                            
-                            # Offer option to adjust the estimated wind
-                            with st.sidebar:
-                                adjusted_wind = st.slider(
-                                    "Fine-tune Wind Direction", 
-                                    min_value=max(0, int(estimated_wind) - 20),
-                                    max_value=min(359, int(estimated_wind) + 20),
-                                    value=int(estimated_wind)
-                                )
-                                if adjusted_wind != int(estimated_wind):
-                                    wind_direction = adjusted_wind
-                                    st.session_state.wind_direction = wind_direction
                         else:
                             # In manual mode, just show the estimated value for comparison
                             st.sidebar.info(f"Estimated wind direction: {estimated_wind:.1f}°")
