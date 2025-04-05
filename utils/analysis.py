@@ -128,62 +128,183 @@ def analyze_wind_angles(stretches, wind_direction):
     
     return result
 
-def estimate_wind_direction(stretches):
-    """Estimate wind direction based on sailing patterns."""
+def estimate_wind_direction(stretches, use_simple_method=True):
+    """
+    Estimate wind direction based on sailing patterns.
+    
+    Uses multiple methods and heuristics to estimate the wind direction:
+    1. Clustering bearings to find opposite tacks
+    2. Assuming most sailing is across the wind (90° from wind)
+    3. Finding the most frequent sailing directions
+    
+    Parameters:
+    - stretches: DataFrame of consistent sailing segments
+    - use_simple_method: If True, uses the simpler and more reliable 
+      method of directly clustering possible wind directions (works 
+      well for most real-world tracks)
+    """
     if len(stretches) < 3:
         return None
     
-    # Filter to stretches with good distance
-    min_distance_threshold = stretches['distance'].quantile(0.5)  # Use median as threshold
+    # Filter to stretches with good distance and speed
+    min_distance_threshold = stretches['distance'].quantile(0.25)  # Lower threshold to include more data
     good_stretches = stretches[stretches['distance'] > min_distance_threshold]
+    
+    # Sort by distance to prioritize longer stretches in analysis
+    good_stretches = good_stretches.sort_values('distance', ascending=False)
     
     if len(good_stretches) < 3:
         return None
     
-    # Try to identify upwind tacks by finding clusters of bearings
+    # Get the bearings from good stretches
     bearings = good_stretches['bearing'].values
     
+    # Method 1: Clustering approach (find most opposite angles)
     # Convert bearings to x,y coordinates on unit circle for proper clustering
     x = np.cos(np.radians(bearings))
     y = np.sin(np.radians(bearings))
     
-    # Try to find 2-4 clusters (usually upwind port/starboard, downwind port/starboard)
-    best_score = -1
-    best_n = 2
-    best_kmeans = None
+    # Try different numbers of clusters to find the best fit
+    best_n = min(4, len(good_stretches) - 1)  # Cap at 4 clusters or n-1
     
-    for n in range(2, min(5, len(good_stretches))):
-        kmeans = KMeans(n_clusters=n, random_state=0, n_init=10).fit(np.column_stack([x, y]))
-        score = kmeans.inertia_
-        if best_score == -1 or score < best_score * 0.7:  # Significant improvement
-            best_score = score
-            best_n = n
-            best_kmeans = kmeans
+    # Use best_n clusters directly instead of trying to determine it dynamically
+    kmeans = KMeans(n_clusters=best_n, random_state=0, n_init=10).fit(np.column_stack([x, y]))
     
     # Get cluster centers and convert back to angles
-    centers = best_kmeans.cluster_centers_
+    centers = kmeans.cluster_centers_
     center_angles = (np.degrees(np.arctan2(centers[:, 1], centers[:, 0])) + 360) % 360
     
-    # Get the two most opposite angles (likely upwind tacks)
+    # Count the number of points in each cluster
+    cluster_counts = [np.sum(kmeans.labels_ == i) for i in range(len(center_angles))]
+    
+    # Find the two most populated clusters that are sufficiently opposite
+    # Sort clusters by population
+    sorted_clusters = sorted(range(len(cluster_counts)), key=lambda i: cluster_counts[i], reverse=True)
+    
+    # Find the most opposite pair among the top 3 most populated clusters
+    top_clusters = sorted_clusters[:min(3, len(sorted_clusters))]
     max_diff = -1
     angle1 = angle2 = 0
     
-    for i in range(len(center_angles)):
-        for j in range(i+1, len(center_angles)):
-            diff = abs(center_angles[i] - center_angles[j])
+    for i in range(len(top_clusters)):
+        for j in range(i+1, len(top_clusters)):
+            idx1 = top_clusters[i]
+            idx2 = top_clusters[j]
+            angle_i = center_angles[idx1]
+            angle_j = center_angles[idx2]
+            diff = abs(angle_i - angle_j)
             diff = min(diff, 360 - diff)
             if diff > max_diff:
                 max_diff = diff
-                angle1 = center_angles[i]
-                angle2 = center_angles[j]
+                angle1 = angle_i
+                angle2 = angle_j
     
-    # If we found a reasonable pair (at least 60° apart)
-    if max_diff > 60:
+    # Method 2: Analyze possible wind directions perpendicular to bearings
+    # Generate possible wind directions from each bearing
+    all_possible_winds = []
+    for bearing in bearings:
+        all_possible_winds.append((bearing + 90) % 360)  # Wind from right
+        all_possible_winds.append((bearing - 90) % 360)  # Wind from left
+    
+    # Cluster the possible wind angles
+    x_wind = np.cos(np.radians(all_possible_winds))
+    y_wind = np.sin(np.radians(all_possible_winds))
+    kmeans_wind = KMeans(n_clusters=2, random_state=0, n_init=10).fit(np.column_stack([x_wind, y_wind]))
+    
+    # Get the cluster centers
+    centers_wind = kmeans_wind.cluster_centers_
+    center_angles_wind = (np.degrees(np.arctan2(centers_wind[:, 1], centers_wind[:, 0])) + 360) % 360
+    
+    # Count the number of points in each cluster
+    cluster_counts_wind = [np.sum(kmeans_wind.labels_ == i) for i in range(len(center_angles_wind))]
+    
+    # The most populated cluster is likely the true wind direction
+    best_cluster = np.argmax(cluster_counts_wind)
+    method2_wind = center_angles_wind[best_cluster]
+    
+    # If the clusters are close to equal, consider both
+    min_points_ratio = min(cluster_counts_wind) / max(cluster_counts_wind)
+    
+    # If using simple method, just return method2_wind which is more reliable
+    # for real-world sailing tracks (directly clusters possible wind directions)
+    if use_simple_method:
+        # Simple method works best for real data
+        return method2_wind
+    
+    # Complex logic for combining the methods - works better for synthetic data
+    # but can be less reliable for real-world tracks with irregular patterns
+    if max_diff > 120:  # We have very opposite tacks - good for method 1
         # Calculate the average heading between the two opposite tacks
+        # This needs special handling if angles cross the 0/360 boundary
+        if abs(angle1 - angle2) > 180:
+            # Adjust one of the angles to handle the boundary crossing
+            if angle1 < angle2:
+                angle1 += 360
+            else:
+                angle2 += 360
+                
         avg_heading = (angle1 + angle2) / 2
+        if avg_heading >= 360:
+            avg_heading -= 360
+            
         # The wind direction is perpendicular to this heading
-        estimated_wind = (avg_heading + 90) % 360
+        method1_wind = (avg_heading + 90) % 360
         
-        return estimated_wind
+        # Check how close the two methods are
+        wind_diff = min(abs(method1_wind - method2_wind), 360 - abs(method1_wind - method2_wind))
+        
+        if wind_diff <= 45:
+            # Methods agree, use a weighted average favoring method 2
+            weight_method1 = 0.3
+            weight_method2 = 0.7
+            
+            # We need to handle the case where methods are on opposite sides of 0/360
+            if abs(method1_wind - method2_wind) > 180:
+                if method1_wind < method2_wind:
+                    method1_wind += 360
+                else:
+                    method2_wind += 360
+                    
+            estimated_wind = (method1_wind * weight_method1 + method2_wind * weight_method2) / (weight_method1 + weight_method2)
+            if estimated_wind >= 360:
+                estimated_wind -= 360
+        else:
+            # Methods disagree significantly
+            # If method 2 is very confident (one cluster much larger than the other), use it
+            if min_points_ratio < 0.3:
+                estimated_wind = method2_wind
+            else:
+                # Otherwise, weakly prefer method 1
+                estimated_wind = method1_wind
+    elif max_diff > 90:  # Good but not ideal - use both methods
+        # Calculate method 1 wind
+        if abs(angle1 - angle2) > 180:
+            if angle1 < angle2:
+                angle1 += 360
+            else:
+                angle2 += 360
+                
+        avg_heading = (angle1 + angle2) / 2
+        if avg_heading >= 360:
+            avg_heading -= 360
+            
+        method1_wind = (avg_heading + 90) % 360
+        
+        # Blend methods with preference for method 2
+        weight_method1 = 0.2
+        weight_method2 = 0.8
+        
+        if abs(method1_wind - method2_wind) > 180:
+            if method1_wind < method2_wind:
+                method1_wind += 360
+            else:
+                method2_wind += 360
+                
+        estimated_wind = (method1_wind * weight_method1 + method2_wind * weight_method2) / (weight_method1 + weight_method2)
+        if estimated_wind >= 360:
+            estimated_wind -= 360
+    else:
+        # Poor opposite angles - rely on method 2
+        estimated_wind = method2_wind
     
-    return None
+    return estimated_wind

@@ -50,6 +50,19 @@ def main():
         # Advanced options
         st.subheader("Advanced")
         auto_detect_wind = st.checkbox("Auto-detect wind direction", value=True)
+        advanced_mode = st.checkbox("Advanced Mode", value=False, 
+                                    help="Enable advanced features and options")
+        
+        if advanced_mode:
+            wind_estimation_method = st.radio(
+                "Wind Estimation Method",
+                ["Simple", "Complex"],
+                index=0,
+                help="Simple works better for real data, complex for synthetic data"
+            )
+            use_simple_method = wind_estimation_method == "Simple"
+        else:
+            use_simple_method = True  # Default to simple method
     
     # File uploader
     uploaded_file = st.file_uploader("Upload a GPX file", type=['gpx'])
@@ -94,9 +107,9 @@ def main():
                         # Try to estimate wind direction if requested
                         if auto_detect_wind:
                             try:
-                                estimated_wind = estimate_wind_direction(stretches)
+                                estimated_wind = estimate_wind_direction(stretches, use_simple_method=use_simple_method)
                                 if estimated_wind is not None:
-                                    logger.info(f"Estimated wind direction: {estimated_wind:.1f}°")
+                                    logger.info(f"Estimated wind direction: {estimated_wind:.1f}° (using {'simple' if use_simple_method else 'complex'} method)")
                                     st.sidebar.success(f"Estimated wind direction: {estimated_wind:.1f}°")
                                     if st.sidebar.button("Use Estimated Wind"):
                                         wind_direction = estimated_wind
@@ -151,13 +164,13 @@ def main():
                                         best_port = port.loc[port['angle_to_wind'].idxmin()]
                                         st.metric("Best Port Upwind", 
                                                 f"{best_port['angle_to_wind']:.1f}°", 
-                                                f"{best_port['speed']:.1f} m/s")
+                                                f"{best_port['speed']:.1f} knots")
                                     
                                     if not starboard.empty:
                                         best_stbd = starboard.loc[starboard['angle_to_wind'].idxmin()]
                                         st.metric("Best Starboard Upwind", 
                                                 f"{best_stbd['angle_to_wind']:.1f}°", 
-                                                f"{best_stbd['speed']:.1f} m/s")
+                                                f"{best_stbd['speed']:.1f} knots")
                                 else:
                                     st.info("No upwind data detected")
                             
@@ -172,13 +185,13 @@ def main():
                                         best_port = port.loc[port['angle_to_wind'].idxmax()]
                                         st.metric("Best Port Downwind", 
                                                 f"{best_port['angle_to_wind']:.1f}°", 
-                                                f"{best_port['speed']:.1f} m/s")
+                                                f"{best_port['speed']:.1f} knots")
                                     
                                     if not starboard.empty:
                                         best_stbd = starboard.loc[starboard['angle_to_wind'].idxmax()]
                                         st.metric("Best Starboard Downwind", 
                                                 f"{best_stbd['angle_to_wind']:.1f}°", 
-                                                f"{best_stbd['speed']:.1f} m/s")
+                                                f"{best_stbd['speed']:.1f} knots")
                                 else:
                                     st.info("No downwind data detected")
                         

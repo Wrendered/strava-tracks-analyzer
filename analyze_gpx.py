@@ -14,7 +14,8 @@ from utils.analysis import find_consistent_angle_stretches, analyze_wind_angles,
 from utils.visualization import plot_polar_diagram, plot_bearing_distribution
 
 def analyze_file(file_path, wind_direction=None, angle_tolerance=10, 
-                min_duration=10, min_distance=50, min_speed=10.0, visualize=False):
+                min_duration=10, min_distance=50, min_speed=10.0, visualize=False,
+                use_simple_wind_method=True):
     """Analyze a single GPX file."""
     print(f"Analyzing file: {file_path}")
     
@@ -59,9 +60,10 @@ def analyze_file(file_path, wind_direction=None, angle_tolerance=10,
     
     # Try to estimate wind direction if not provided
     if wind_direction is None:
-        estimated_wind = estimate_wind_direction(stretches)
+        # Use appropriate method for wind direction estimation
+        estimated_wind = estimate_wind_direction(stretches, use_simple_method=use_simple_wind_method)
         if estimated_wind is not None:
-            print(f"\nEstimated wind direction: {estimated_wind:.1f}°")
+            print(f"\nEstimated wind direction: {estimated_wind:.1f}° (using {('simple' if use_simple_wind_method else 'complex')} method)")
             wind_direction = estimated_wind
         else:
             print("\nCould not estimate wind direction. Please provide one.")
@@ -136,6 +138,8 @@ def main():
     parser.add_argument("--list-samples", action="store_true", help="List available sample files")
     parser.add_argument("--sample", type=int, help="Use a sample file (specify index)")
     parser.add_argument("--visualize", "-v", action="store_true", help="Show visualization plots")
+    parser.add_argument("--complex-wind", action="store_true", 
+                       help="Use complex wind estimation method (better for synthetic data)")
     
     args = parser.parse_args()
     
@@ -178,7 +182,8 @@ def main():
         min_duration=args.min_duration,
         min_distance=args.min_distance,
         min_speed=args.min_speed,
-        visualize=args.visualize
+        visualize=args.visualize,
+        use_simple_wind_method=not args.complex_wind  # Default to simple method unless --complex-wind is specified
     )
 
 if __name__ == "__main__":
