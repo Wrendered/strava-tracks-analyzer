@@ -71,27 +71,50 @@ def main():
         # Segment detection parameters
         st.subheader("Segment Detection")
         angle_tolerance = st.slider("Angle Tolerance (°)", 
-                                   min_value=1, max_value=20, value=10)
+                                   min_value=5, max_value=20, value=12,
+                                   help="How much the bearing can vary within a segment")
         
         # Minimum criteria
         min_duration = st.slider("Min Duration (sec)", min_value=1, max_value=60, value=10)
         min_distance = st.slider("Min Distance (m)", min_value=10, max_value=200, value=50)
         min_speed = st.slider("Min Speed (knots)", min_value=5.0, max_value=30.0, value=10.0, step=0.5)
+        
+        st.subheader("Speed Filter")
+        active_speed_threshold = st.slider("Active Speed Threshold (knots)", 
+                                          min_value=0.0, max_value=10.0, value=5.0, step=0.5,
+                                          help="Speeds below this will be excluded from average speed calculation")
 
         min_speed_ms = min_speed * 0.514444  # Convert knots to m/s
         
         # Advanced options
         st.subheader("Advanced Options")
         advanced_mode = st.checkbox("Advanced Mode", value=False, 
-                                   help="Enable advanced features and options")
+                                   help="Enable advanced features like wind estimation method selection")
+        
+        if advanced_mode:
+            st.info("""
+            **Advanced Mode gives you access to:**
+            - Wind estimation method selection
+            - Additional analysis options
+            - Fine-tuning of algorithm parameters
+            """, icon="ℹ️")
         
         if advanced_mode:
             wind_estimation_method = st.radio(
                 "Wind Estimation Method",
                 ["Simple", "Complex"],
                 index=0,
-                help="Simple works better for real data, complex for synthetic data"
+                help="Choose the algorithm for wind direction estimation"
             )
+            
+            st.caption("""
+            **Simple Method:** Works best for real-world tracks. Analyzes what angles you sailed and finds the most 
+            consistent wind direction to explain them. Preferred for most situations.
+            
+            **Complex Method:** Uses a more sophisticated algorithm that works well for synthetic or 
+            "perfect" data but can be less reliable with real tracks.
+            """)
+            
             use_simple_method = wind_estimation_method == "Simple"
         else:
             use_simple_method = True  # Default to simple method
@@ -111,20 +134,35 @@ def main():
                 st.error(f"Error loading GPX file: {e}")
                 gpx_data = pd.DataFrame()
             
-            # Calculate basic track metrics
+            # Calculate basic track metrics with active speed filter
             if not gpx_data.empty:
-                metrics = calculate_track_metrics(gpx_data)
+                metrics = calculate_track_metrics(gpx_data, min_speed_knots=active_speed_threshold)
                 
                 # Display track summary
                 col1, col2 = st.columns(2)
                 with col1:
                     st.subheader("Track Summary")
                     st.write(f"📅 Date: {metrics['date']}")
-                    st.write(f"⏱️ Duration: {metrics['duration']}")
+                    st.write(f"⏱️ Total Duration: {metrics['duration']}")
+                    
+                    # Show active metrics if available
+                    if 'active_duration' in metrics:
+                        active_percent = (metrics['active_duration'].total_seconds() / metrics['total_duration_seconds']) * 100 if metrics['total_duration_seconds'] > 0 else 0
+                        st.write(f"⏱️ Active Duration: {metrics['active_duration']} ({active_percent:.1f}%)")
                 
                 with col2:
                     st.metric("📏 Total Distance", f"{metrics['distance']:.2f} km")
-                    st.metric("⚡ Average Speed", f"{metrics['avg_speed']:.2f} knots")
+                    
+                    # Show weighted average speed (active only)
+                    if 'weighted_avg_speed' in metrics:
+                        st.metric("⚡ Active Average Speed", f"{metrics['weighted_avg_speed']:.2f} knots", 
+                                 help=f"Average speed when moving above {active_speed_threshold} knots")
+                    else:
+                        st.metric("⚡ Average Speed", f"{metrics['avg_speed']:.2f} knots")
+                    
+                    # Show comparison if different
+                    if 'overall_avg_speed' in metrics and abs(metrics['overall_avg_speed'] - metrics['weighted_avg_speed']) > 0.1:
+                        st.caption(f"Overall average (including stops): {metrics['overall_avg_speed']:.2f} knots")
                 
                 # Find consistent angle stretches
                 stretches = find_consistent_angle_stretches(

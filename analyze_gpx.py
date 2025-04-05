@@ -15,7 +15,7 @@ from utils.visualization import plot_polar_diagram, plot_bearing_distribution
 
 def analyze_file(file_path, wind_direction=None, angle_tolerance=10, 
                 min_duration=10, min_distance=50, min_speed=10.0, visualize=False,
-                use_simple_wind_method=True):
+                use_simple_wind_method=True, active_speed_threshold=5.0):
     """Analyze a single GPX file."""
     print(f"Analyzing file: {file_path}")
     
@@ -33,14 +33,25 @@ def analyze_file(file_path, wind_direction=None, angle_tolerance=10,
         print("No data found in GPX file.")
         return
     
-    # Calculate basic metrics
-    metrics = calculate_track_metrics(gpx_data)
+    # Calculate basic metrics with active speed threshold
+    metrics = calculate_track_metrics(gpx_data, min_speed_knots=active_speed_threshold)
     
     print("\nTrack Summary:")
     print(f"Date: {metrics['date']}")
-    print(f"Duration: {metrics['duration']}")
+    print(f"Total Duration: {metrics['duration']}")
+    
+    if 'active_duration' in metrics:
+        active_percent = (metrics['active_duration'].total_seconds() / metrics['total_duration_seconds']) * 100 if metrics['total_duration_seconds'] > 0 else 0
+        print(f"Active Duration: {metrics['active_duration']} ({active_percent:.1f}%)")
+    
     print(f"Distance: {metrics['distance']:.2f} km")
-    print(f"Average Speed: {metrics['avg_speed']:.2f} knots")
+    
+    if 'weighted_avg_speed' in metrics:
+        print(f"Active Average Speed: {metrics['weighted_avg_speed']:.2f} knots (when > {active_speed_threshold} knots)")
+        if abs(metrics['overall_avg_speed'] - metrics['weighted_avg_speed']) > 0.1:
+            print(f"Overall Average Speed: {metrics['overall_avg_speed']:.2f} knots (including stops)")
+    else:
+        print(f"Average Speed: {metrics['avg_speed']:.2f} knots")
     
     # Find consistent angle stretches
     stretches = find_consistent_angle_stretches(
@@ -145,6 +156,8 @@ def main():
     parser.add_argument("--min-duration", type=float, default=10, help="Minimum segment duration in seconds")
     parser.add_argument("--min-distance", type=float, default=50, help="Minimum segment distance in meters")
     parser.add_argument("--min-speed", type=float, default=10.0, help="Minimum segment speed in knots")
+    parser.add_argument("--active-threshold", type=float, default=5.0, 
+                       help="Speed threshold (knots) for average speed calculation, excludes lower speeds")
     parser.add_argument("--list-samples", action="store_true", help="List available sample files")
     parser.add_argument("--sample", type=int, help="Use a sample file (specify index)")
     parser.add_argument("--visualize", "-v", action="store_true", help="Show visualization plots")
@@ -193,7 +206,8 @@ def main():
         min_distance=args.min_distance,
         min_speed=args.min_speed,
         visualize=args.visualize,
-        use_simple_wind_method=not args.complex_wind  # Default to simple method unless --complex-wind is specified
+        use_simple_wind_method=not args.complex_wind,  # Default to simple method unless --complex-wind is specified
+        active_speed_threshold=args.active_threshold
     )
 
 if __name__ == "__main__":

@@ -199,10 +199,8 @@ def plot_polar_diagram(stretches, wind_direction):
             ax_port.text(np.radians(angle), max_r_port * 1.07, label, 
                     ha='center', va='center', color=color, fontsize=9)
         
-        # Add title and labels
+        # Add title only - removing the "INTO WIND/DOWNWIND" labels that overlap with other text
         ax_port.set_title('Port Tack', fontweight='bold', pad=15)
-        ax_port.text(0, -0.14, "INTO WIND", ha='center', va='center', transform=ax_port.transAxes, fontsize=8)
-        ax_port.text(1.0, -0.14, "DOWNWIND", ha='center', va='center', transform=ax_port.transAxes, fontsize=8)
     
     # ===== STARBOARD TACK (RIGHT SIDE) =====
     if sum(starboard_mask) > 0:
@@ -258,10 +256,8 @@ def plot_polar_diagram(stretches, wind_direction):
             ax_starboard.text(np.radians(angle), max_r_starboard * 1.07, label, 
                     ha='center', va='center', color=color, fontsize=9)
         
-        # Add title and labels
+        # Add title only - removing the "INTO WIND/DOWNWIND" labels that overlap with other text
         ax_starboard.set_title('Starboard Tack', fontweight='bold', pad=15)
-        ax_starboard.text(0, -0.14, "INTO WIND", ha='center', va='center', transform=ax_starboard.transAxes, fontsize=8)
-        ax_starboard.text(1.0, -0.14, "DOWNWIND", ha='center', va='center', transform=ax_starboard.transAxes, fontsize=8)
     
     # ===== COMMON ELEMENTS =====
     # Set the same scale for both plots if both exist
@@ -280,16 +276,16 @@ def plot_polar_diagram(stretches, wind_direction):
         cbar = fig.colorbar(scatter_for_colorbar, cax=cbar_ax)
         cbar.set_label('Angle to Wind (degrees)')
     
-    # Add explanatory text
-    plt.figtext(0.5, 0.02, 
+    # Add explanatory text with better spacing
+    plt.figtext(0.5, 0.03, 
                "These polar plots show your speed (radius) at different angles to the wind.\n" +
-               "0° is directly into the wind, 90° is across, 180° is directly downwind.\n" +
-               "Marker size indicates distance sailed at this angle/speed.",
+               "0° is directly into the wind (top), 90° is across (sides), 180° is directly downwind (bottom).\n" +
+               "Marker size indicates distance sailed at this angle/speed combination.",
                ha='center', fontsize=9, wrap=True)
     
-    # Adjust layout
+    # Adjust layout - increase bottom margin to give text more room
     plt.tight_layout()
-    plt.subplots_adjust(bottom=0.15, right=0.85)
+    plt.subplots_adjust(bottom=0.17, right=0.85)
     
     return fig
 
