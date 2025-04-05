@@ -132,18 +132,11 @@ def display_track_map(gpx_data, stretches, wind_direction, estimated_wind=None):
     folium_static(m)
 
 def plot_polar_diagram(stretches, wind_direction):
-    """Create a polar plot showing sailing angles relative to wind."""
-    fig, ax = plt.subplots(figsize=(9, 9), subplot_kw={'projection': 'polar'})
+    """Create a polar plot showing sailing performance at different angles to wind."""
+    # Create figure with two subplots side by side
+    fig = plt.figure(figsize=(12, 6))
     
-    # Convert to polar coordinates (r=speed, theta=angle to wind)
-    thetas = np.radians(stretches['angle_to_wind'].values)
-    r = stretches['speed'].values  # Speed is now in knots
-    weights = stretches['distance'].values
-    
-    # Normalize weights for scatter size
-    norm_weights = 20 * weights / weights.max() + 10 if weights.max() > 0 else 10
-    
-    # Create separate plots for port and starboard tacks with different colors
+    # Get data ready
     port_mask = stretches['tack'] == 'Port'
     starboard_mask = stretches['tack'] == 'Starboard'
     
@@ -151,82 +144,152 @@ def plot_polar_diagram(stretches, wind_direction):
     cmap = LinearSegmentedColormap.from_list(
         'wind_colormap', [(0, 'darkred'), (0.5, 'gold'), (1, 'darkblue')])
     
-    # Plot port tack points (red colors)
+    # Split the plot into port and starboard sections
+    # ===== PORT TACK (LEFT SIDE) =====
     if sum(port_mask) > 0:
-        port_scatter = ax.scatter(
-            thetas[port_mask], r[port_mask], 
-            c=stretches.loc[port_mask, 'angle_to_wind'], 
-            cmap=cmap, s=norm_weights[port_mask], alpha=0.7, 
+        port_data = stretches[port_mask].copy()
+        
+        # Create left subplot for Port tack (0-180°)
+        ax_port = fig.add_subplot(121, projection='polar')
+        
+        # Get values
+        thetas = np.radians(port_data['angle_to_wind'].values)
+        r = port_data['speed'].values  # Speed in knots
+        weights = port_data['distance'].values
+        
+        # Normalize weights for scatter size
+        norm_weights = 20 * weights / weights.max() + 10 if weights.max() > 0 else 10
+        
+        # Plot the port tack points
+        port_scatter = ax_port.scatter(
+            thetas, r, 
+            c=port_data['angle_to_wind'], 
+            cmap=cmap, s=norm_weights, alpha=0.8, 
             vmin=0, vmax=180, marker='o', edgecolors='darkred'
         )
         
-    # Plot starboard tack points (blue colors)
+        # Set up the polar plot - 0 degrees at top (upwind)
+        ax_port.set_theta_zero_location('N')  # 0 degrees at the top
+        ax_port.set_theta_direction(-1)  # clockwise
+        
+        # Set the theta limits to 0-180 degrees (only show the top half)
+        ax_port.set_thetamin(0)
+        ax_port.set_thetamax(180)
+        
+        # Get max speed for consistent scaling and annotations
+        max_r_port = max(r) if len(r) > 0 else 1
+        
+        # Set consistent speed rings
+        radii = np.linspace(0, np.ceil(max_r_port), 6)
+        ax_port.set_rticks(radii)
+        ax_port.set_rlim(0, np.ceil(max_r_port) * 1.1)
+        
+        # Add important angle reference lines
+        angles = [0, 45, 90, 135, 180]
+        labels = ["0°", "45°", "90°", "135°", "180°"]
+        linestyles = [':', '--', '-', '--', ':']
+        colors = ['black', 'red', 'green', 'orange', 'black']
+        
+        for angle, label, ls, color in zip(angles, labels, linestyles, colors):
+            # Add radial lines at important angles
+            ax_port.plot([np.radians(angle), np.radians(angle)], [0, max_r_port * 1.1], 
+                    ls=ls, color=color, alpha=0.5, linewidth=1)
+            
+            # Add angle labels just outside the plot
+            ax_port.text(np.radians(angle), max_r_port * 1.07, label, 
+                    ha='center', va='center', color=color, fontsize=9)
+        
+        # Add title and labels
+        ax_port.set_title('Port Tack', fontweight='bold', pad=15)
+        ax_port.text(0, -0.14, "INTO WIND", ha='center', va='center', transform=ax_port.transAxes, fontsize=8)
+        ax_port.text(1.0, -0.14, "DOWNWIND", ha='center', va='center', transform=ax_port.transAxes, fontsize=8)
+    
+    # ===== STARBOARD TACK (RIGHT SIDE) =====
     if sum(starboard_mask) > 0:
-        starboard_scatter = ax.scatter(
-            thetas[starboard_mask], r[starboard_mask], 
-            c=stretches.loc[starboard_mask, 'angle_to_wind'], 
-            cmap=cmap, s=norm_weights[starboard_mask], alpha=0.7, 
+        starboard_data = stretches[starboard_mask].copy()
+        
+        # Create right subplot for Starboard tack (0-180°)
+        ax_starboard = fig.add_subplot(122, projection='polar')
+        
+        # Get values
+        thetas = np.radians(starboard_data['angle_to_wind'].values)
+        r = starboard_data['speed'].values  # Speed in knots
+        weights = starboard_data['distance'].values
+        
+        # Normalize weights for scatter size
+        norm_weights = 20 * weights / weights.max() + 10 if weights.max() > 0 else 10
+        
+        # Plot the starboard tack points
+        starboard_scatter = ax_starboard.scatter(
+            thetas, r, 
+            c=starboard_data['angle_to_wind'], 
+            cmap=cmap, s=norm_weights, alpha=0.8, 
             vmin=0, vmax=180, marker='s', edgecolors='darkblue'
         )
+        
+        # Set up the polar plot - 0 degrees at top (upwind)
+        ax_starboard.set_theta_zero_location('N')  # 0 degrees at the top
+        ax_starboard.set_theta_direction(-1)  # clockwise
+        
+        # Set the theta limits to 0-180 degrees (only show the top half)
+        ax_starboard.set_thetamin(0)
+        ax_starboard.set_thetamax(180)
+        
+        # Get max speed for consistent scaling and annotations
+        max_r_starboard = max(r) if len(r) > 0 else 1
+        
+        # Set consistent speed rings
+        radii = np.linspace(0, np.ceil(max_r_starboard), 6)
+        ax_starboard.set_rticks(radii)
+        ax_starboard.set_rlim(0, np.ceil(max_r_starboard) * 1.1)
+        
+        # Add important angle reference lines
+        angles = [0, 45, 90, 135, 180]
+        labels = ["0°", "45°", "90°", "135°", "180°"]
+        linestyles = [':', '--', '-', '--', ':']
+        colors = ['black', 'red', 'green', 'orange', 'black']
+        
+        for angle, label, ls, color in zip(angles, labels, linestyles, colors):
+            # Add radial lines at important angles
+            ax_starboard.plot([np.radians(angle), np.radians(angle)], [0, max_r_starboard * 1.1], 
+                    ls=ls, color=color, alpha=0.5, linewidth=1)
+            
+            # Add angle labels just outside the plot
+            ax_starboard.text(np.radians(angle), max_r_starboard * 1.07, label, 
+                    ha='center', va='center', color=color, fontsize=9)
+        
+        # Add title and labels
+        ax_starboard.set_title('Starboard Tack', fontweight='bold', pad=15)
+        ax_starboard.text(0, -0.14, "INTO WIND", ha='center', va='center', transform=ax_starboard.transAxes, fontsize=8)
+        ax_starboard.text(1.0, -0.14, "DOWNWIND", ha='center', va='center', transform=ax_starboard.transAxes, fontsize=8)
     
-    # Use the full scatter for colorbar (one of them)
-    scatter_for_colorbar = port_scatter if sum(port_mask) > 0 else starboard_scatter if sum(starboard_mask) > 0 else None
-    
-    if scatter_for_colorbar is not None:
-        # Add colorbar
-        cbar = plt.colorbar(scatter_for_colorbar, ax=ax, pad=0.1)
+    # ===== COMMON ELEMENTS =====
+    # Set the same scale for both plots if both exist
+    if sum(port_mask) > 0 and sum(starboard_mask) > 0:
+        max_r_all = max(max_r_port, max_r_starboard)
+        radii = np.linspace(0, np.ceil(max_r_all), 6)
+        ax_port.set_rticks(radii)
+        ax_port.set_rlim(0, np.ceil(max_r_all) * 1.1)
+        ax_starboard.set_rticks(radii)
+        ax_starboard.set_rlim(0, np.ceil(max_r_all) * 1.1)
+        
+    # Add colorbar if we have data
+    if sum(port_mask) > 0 or sum(starboard_mask) > 0:
+        scatter_for_colorbar = port_scatter if sum(port_mask) > 0 else starboard_scatter
+        cbar_ax = fig.add_axes([0.92, 0.15, 0.02, 0.7])  # [left, bottom, width, height]
+        cbar = fig.colorbar(scatter_for_colorbar, cax=cbar_ax)
         cbar.set_label('Angle to Wind (degrees)')
     
-    # Set up the polar plot - 0 degrees is TO WIND (not North)
-    ax.set_theta_zero_location('N')  # 0 degrees at the top
-    ax.set_theta_direction(-1)  # clockwise
-    
-    # Add wind direction and angle explanations
-    ax.text(0, -0.1, "INTO WIND (0°)", ha='center', va='center', transform=ax.transAxes, fontweight='bold')
-    ax.text(0.5, -0.1, "DOWNWIND (180°)", ha='center', va='center', transform=ax.transAxes, fontweight='bold')
-    
-    # Calculate max radius for annotations
-    max_r = max(r) if len(r) > 0 else 1
-    
-    # Add reference lines for important wind angles
-    angles = [0, 45, 90, 135, 180, 225, 270, 315]
-    labels = ["0°", "45°", "90°", "135°", "180°", "225°", "270°", "315°"]
-    linestyles = [':', '--', '-', '--', ':', '--', '-', '--']
-    colors = ['black', 'red', 'green', 'orange', 'black', 'purple', 'green', 'blue']
-    
-    for angle, label, ls, color in zip(angles, labels, linestyles, colors):
-        # Add radial lines at important angles
-        ax.plot([np.radians(angle), np.radians(angle)], [0, max_r * 1.1], 
-                ls=ls, color=color, alpha=0.5, linewidth=1)
-        
-        # Add angle labels just outside the plot
-        ax.text(np.radians(angle), max_r * 1.07, label, 
-                ha='center', va='center', color=color, fontsize=9)
-    
-    # Add legend for tacks
-    ax.plot([], [], 'o', color='white', markeredgecolor='darkred', label='Port Tack')
-    ax.plot([], [], 's', color='white', markeredgecolor='darkblue', label='Starboard Tack')
-    ax.legend(loc='upper right')
-    
-    # Add explanation text
-    plt.figtext(0.5, 0.01, 
-               "This polar plot shows your speed (radius) at different angles to the wind (angle).\n" +
-               "0° is directly into the wind, 90° is across the wind, 180° is directly downwind.\n" +
-               "Dots represent consistent segments; larger dots are longer distances.",
+    # Add explanatory text
+    plt.figtext(0.5, 0.02, 
+               "These polar plots show your speed (radius) at different angles to the wind.\n" +
+               "0° is directly into the wind, 90° is across, 180° is directly downwind.\n" +
+               "Marker size indicates distance sailed at this angle/speed.",
                ha='center', fontsize=9, wrap=True)
     
-    # Add radial labels (speed in knots)
-    if len(r) > 0:
-        radii = np.linspace(0, max(1, round(max_r)), 5)
-        ax.set_rticks(radii)
-        ax.set_rlabel_position(45)
-        ax.set_rlim(0, max_r * 1.1)
-        ax.grid(True)
-    
-    ax.set_title('Polar Performance Plot (Speed in Knots vs Angle to Wind)', va='bottom')
-    plt.figtext(0.5, 0.01, "Angles show degrees off wind, color indicates wind angle (0-180°)", 
-               ha='center', fontsize=10, wrap=True)
+    # Adjust layout
     plt.tight_layout()
+    plt.subplots_adjust(bottom=0.15, right=0.85)
     
     return fig
 

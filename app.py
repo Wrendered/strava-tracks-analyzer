@@ -174,7 +174,7 @@ def main():
                         # If we're using auto but couldn't estimate, fall back to default
                         if auto_detect_wind and estimated_wind is None:
                             # We keep the default or manually overridden value of wind_direction
-
+                            pass
                         
                         # Calculate angles relative to wind
                         stretches = analyze_wind_angles(stretches, wind_direction)
