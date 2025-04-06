@@ -338,13 +338,23 @@ def single_track_analysis():
                     display_track_map(gpx_data, stretches, wind_direction, estimated_wind)
                 
                 with col2:
-                    # Display polar plot
+                    # Use the filtered segments for visualization
                     st.subheader("Polar Performance")
-                    if len(stretches) > 2:
-                        fig = plot_polar_diagram(stretches, wind_direction)
-                        st.pyplot(fig)
+                    
+                    # Get the filtered stretches for visualization
+                    if 'selected_segments' in st.session_state and len(st.session_state.selected_segments) > 0:
+                        filtered_stretches = stretches.loc[stretches.index.isin(st.session_state.selected_segments)]
+                        source_note = f"(using {len(filtered_stretches)} selected segments)"
                     else:
-                        st.info("Not enough data for polar plot")
+                        filtered_stretches = stretches
+                        source_note = f"(using all {len(stretches)} segments)"
+                    
+                    if len(filtered_stretches) > 2:
+                        fig = plot_polar_diagram(filtered_stretches, wind_direction)
+                        st.pyplot(fig)
+                        st.caption(source_note)
+                    else:
+                        st.info("Not enough data for polar plot (need at least 3 segments)")
                 
                 # Display explanation of angles
                 st.subheader("Wind Angle Explanation")
@@ -419,8 +429,12 @@ def single_track_analysis():
                 fig = plot_bearing_distribution(stretches, wind_direction)
                 st.pyplot(fig)
                 
-                # Display data table
+                # Display data table with selection options
                 st.subheader(f"Detected Segments ({len(stretches)})")
+                
+                # Store the segment data in session state if not already there
+                if 'segment_data' not in st.session_state:
+                    st.session_state.segment_data = stretches.copy()
                 
                 # Create a DataFrame with renamed columns for clarity
                 display_cols = ['sailing_type', 'bearing', 'angle_to_wind', 
@@ -428,8 +442,20 @@ def single_track_analysis():
                 
                 display_df = stretches[display_cols].copy()
                 
+                # Add index as segment ID
+                display_df = display_df.reset_index()
+                
+                # Flag suspicious values (small angles to wind)
+                display_df['suspicious'] = display_df['angle_to_wind'] < 15
+                
+                # Add a column for segment selection
+                if 'selected_segments' not in st.session_state:
+                    # Default to all segments selected
+                    st.session_state.selected_segments = display_df.index.tolist()
+                
                 # Rename columns to be clearer
                 display_df = display_df.rename(columns={
+                    'index': 'segment_id',
                     'bearing': 'heading (°)',
                     'angle_to_wind': 'angle off wind (°)',
                     'distance': 'distance (m)',
@@ -443,7 +469,59 @@ def single_track_analysis():
                 display_df['distance (m)'] = display_df['distance (m)'].round(1)
                 display_df['speed (knots)'] = display_df['speed (knots)'].round(2)
                 
-                st.dataframe(display_df)
+                # Add a warning for suspicious values
+                if display_df['suspicious'].any():
+                    st.warning(f"⚠️ {display_df['suspicious'].sum()} segments have suspiciously small angles to wind (< 15°). " +
+                              f"Consider deselecting these segments or adjusting the wind direction.")
+                
+                # Use checkboxes for segment selection
+                with st.expander("Select which segments to include in analysis", expanded=False):
+                    # Add buttons for quick selection
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        if st.button("Select All"):
+                            st.session_state.selected_segments = display_df['segment_id'].tolist()
+                    with col2:
+                        if st.button("Deselect Suspicious"):
+                            st.session_state.selected_segments = display_df[~display_df['suspicious']]['segment_id'].tolist()
+                    
+                    # Show the segments with checkboxes
+                    selected_segments = []
+                    
+                    for i, row in display_df.iterrows():
+                        segment_id = row['segment_id']
+                        angle = row['angle off wind (°)']
+                        speed = row['speed (knots)']
+                        type_str = row['sailing_type']
+                        is_suspicious = row['suspicious']
+                        
+                        # Format the label based on whether it's suspicious
+                        if is_suspicious:
+                            label = f"⚠️ Segment {segment_id}: {type_str}, {angle}° off wind, {speed} knots"
+                        else:
+                            label = f"Segment {segment_id}: {type_str}, {angle}° off wind, {speed} knots"
+                        
+                        # Create a checkbox for each segment
+                        is_selected = st.checkbox(
+                            label, 
+                            value=segment_id in st.session_state.selected_segments,
+                            key=f"segment_{segment_id}"
+                        )
+                        
+                        if is_selected:
+                            selected_segments.append(segment_id)
+                    
+                    # Update session state with selected segments
+                    st.session_state.selected_segments = selected_segments
+                
+                # Use only the selected segments for display and analysis
+                filtered_display_df = display_df[display_df['segment_id'].isin(st.session_state.selected_segments)]
+                
+                if len(filtered_display_df) < len(display_df):
+                    st.info(f"Showing {len(filtered_display_df)} of {len(display_df)} segments (filtered by selection)")
+                
+                # Show the filtered dataframe
+                st.dataframe(filtered_display_df.drop(['suspicious'], axis=1))
                 
                 # Data download
                 csv = stretches.to_csv(index=False)

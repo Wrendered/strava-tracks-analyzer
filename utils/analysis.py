@@ -97,11 +97,16 @@ def find_consistent_angle_stretches(df, angle_tolerance, min_duration_seconds, m
         result_df = pd.DataFrame(stretches)
         # Convert speed from m/s to knots (1 m/s = 1.94384 knots)
         result_df['speed'] = result_df['speed'] * 1.94384
+        
+        # Log the found stretches for debugging
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"Found {len(result_df)} stretches with bearings: {result_df['bearing'].tolist()}")
+        
         return result_df
     
-    return pd.DataFrame(stretches)
-    
-    return pd.DataFrame(stretches)
+    # Create empty DataFrame with correct columns if no stretches
+    return pd.DataFrame(columns=['start_idx', 'end_idx', 'bearing', 'distance', 'duration', 'speed'])
 
 def analyze_wind_angles(stretches, wind_direction):
     """Calculate angles relative to wind and determine tack."""
@@ -111,20 +116,38 @@ def analyze_wind_angles(stretches, wind_direction):
     # Make a copy to avoid modifying the original
     result = stretches.copy()
     
+    # Add the wind direction for reference
+    result['wind_direction'] = wind_direction
+    
     # Calculate angles relative to wind
     result['angle_to_wind'] = result['bearing'].apply(
         lambda x: angle_to_wind(x, wind_direction))
     
-    # Determine if upwind/downwind and tack
+    # Determine tack based on bearing relative to wind direction
     result['tack'] = result['bearing'].apply(
         lambda x: 'Port' if (x - wind_direction) % 360 <= 180 else 'Starboard')
     
+    # Determine upwind vs downwind based on angle to wind
     result['upwind_downwind'] = result.apply(
         lambda row: 'Upwind' if row['angle_to_wind'] < 90 else 'Downwind', axis=1)
     
-    # Create combined category for coloring
+    # Create combined category for coloring and display
     result['sailing_type'] = result.apply(
         lambda row: f"{row['upwind_downwind']} {row['tack']}", axis=1)
+    
+    # Add debug info to help verify calculations
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"Wind direction: {wind_direction}°")
+    
+    # Log a summary of the tacks
+    port_count = sum(result['tack'] == 'Port')
+    stbd_count = sum(result['tack'] == 'Starboard')
+    upwind_count = sum(result['upwind_downwind'] == 'Upwind')
+    downwind_count = sum(result['upwind_downwind'] == 'Downwind')
+    
+    logger.info(f"Tack summary: {port_count} Port, {stbd_count} Starboard")
+    logger.info(f"Direction summary: {upwind_count} Upwind, {downwind_count} Downwind")
     
     return result
 

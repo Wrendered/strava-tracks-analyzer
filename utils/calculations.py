@@ -139,6 +139,38 @@ def meters_per_second_to_knots(speed_ms):
     return speed_ms * 1.94384
 
 def angle_to_wind(bearing, wind_direction):
-    """Calculate angle relative to the wind direction."""
+    """
+    Calculate angle relative to the wind direction.
+    
+    This calculates the minimum angle between the bearing and the wind direction,
+    representing how far off the wind we're sailing (0-180 degrees).
+    
+    Parameters:
+    - bearing: The direction we're traveling (0-359 degrees)
+    - wind_direction: The direction the wind is coming from (0-359 degrees)
+    
+    Returns:
+    - The angle to wind (0-180 degrees)
+      - 0° means sailing directly INTO the wind (impossible)
+      - 90° means sailing ACROSS the wind (beam reach)
+      - 180° means sailing directly away from the wind (downwind)
+    """
+    # Ensure input values are within 0-359 range
+    bearing = bearing % 360
+    wind_direction = wind_direction % 360
+    
+    # Calculate the absolute difference
     diff = abs(bearing - wind_direction)
-    return min(diff, 360 - diff)
+    
+    # Take the smaller angle (0-180)
+    angle = min(diff, 360 - diff)
+    
+    # Log suspicious values but don't modify them - let the user decide
+    if angle < 15:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Suspiciously small angle to wind detected: {angle}° " + 
+                      f"(bearing: {bearing}°, wind: {wind_direction}°)")
+        # Note: We'll flag this for the user to review rather than silently modifying it
+    
+    return angle
