@@ -174,3 +174,93 @@ def angle_to_wind(bearing, wind_direction):
         # Note: We'll flag this for the user to review rather than silently modifying it
     
     return angle
+
+def calculate_average_angle_from_segments(segments):
+    """
+    Calculate the average angle to wind based on selected segments.
+    
+    This function estimates the true wind direction based on the tack patterns
+    in the selected segments. It assumes the sailor is using similar angles
+    on port and starboard tacks.
+    
+    Parameters:
+    - segments: DataFrame with sailing segments, containing at minimum:
+                'bearing', 'tack', 'angle_to_wind', 'distance'
+    
+    Returns:
+    - Dictionary with:
+      - average_angle: the average angle off the wind across tacks
+      - port_average: average angle off the wind on port tack
+      - starboard_average: average angle off the wind on starboard tack
+      - selected_bearings: the bearings used for calculation
+      - port_count: number of port tack segments used
+      - starboard_count: number of starboard tack segments used
+    """
+    if segments.empty:
+        return {
+            'average_angle': None,
+            'port_average': None,
+            'starboard_average': None,
+            'selected_bearings': [],
+            'port_count': 0,
+            'starboard_count': 0
+        }
+    
+    import numpy as np
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    # Split by tack
+    port_tack = segments[segments['tack'] == 'Port']
+    starboard_tack = segments[segments['tack'] == 'Starboard']
+    
+    # Get averages for each tack (weighted by distance)
+    port_average = None
+    starboard_average = None
+    avg_angle = None
+    port_bearings = []
+    starboard_bearings = []
+    
+    if not port_tack.empty:
+        # Weight by distance
+        port_weights = port_tack['distance'].values
+        port_angles = port_tack['angle_to_wind'].values
+        port_bearings = port_tack['bearing'].values.tolist()
+        
+        # Calculate weighted average
+        port_average = np.average(port_angles, weights=port_weights)
+        logger.info(f"Port tack average angle: {port_average:.1f}° (from {len(port_tack)} segments)")
+    
+    if not starboard_tack.empty:
+        # Weight by distance
+        starboard_weights = starboard_tack['distance'].values
+        starboard_angles = starboard_tack['angle_to_wind'].values
+        starboard_bearings = starboard_tack['bearing'].values.tolist()
+        
+        # Calculate weighted average
+        starboard_average = np.average(starboard_angles, weights=starboard_weights)
+        logger.info(f"Starboard tack average angle: {starboard_average:.1f}° (from {len(starboard_tack)} segments)")
+    
+    # If we have data from both tacks, average them
+    if port_average is not None and starboard_average is not None:
+        avg_angle = (port_average + starboard_average) / 2
+        logger.info(f"Combined average angle off the wind: {avg_angle:.1f}° " +
+                   f"(port: {port_average:.1f}°, starboard: {starboard_average:.1f}°)")
+    elif port_average is not None:
+        avg_angle = port_average
+        logger.info(f"Using only port tack data for average angle: {avg_angle:.1f}°")
+    elif starboard_average is not None:
+        avg_angle = starboard_average
+        logger.info(f"Using only starboard tack data for average angle: {avg_angle:.1f}°")
+    
+    # Combine all bearings used
+    selected_bearings = port_bearings + starboard_bearings
+    
+    return {
+        'average_angle': avg_angle,
+        'port_average': port_average,
+        'starboard_average': starboard_average,
+        'selected_bearings': selected_bearings,
+        'port_count': len(port_tack),
+        'starboard_count': len(starboard_tack)
+    }

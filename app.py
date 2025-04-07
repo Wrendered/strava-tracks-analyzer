@@ -194,6 +194,19 @@ def single_track_analysis():
             use_simple_method = wind_estimation_method == "Simple"
         else:
             use_simple_method = True  # Default to simple method
+            
+        # Add wind angle explanation at the bottom of the sidebar
+        st.divider()
+        st.subheader("Wind Angle Explanation")
+        st.markdown("""
+        The angles shown in the analysis are measured as **degrees off the wind direction**:
+        - **0°** means sailing directly into the wind (impossible)
+        - **45°** is a typical upwind angle
+        - **90°** is sailing across the wind (beam reach)
+        - **180°** is sailing directly downwind
+        
+        Smaller angles are better for upwind performance, larger angles are better for downwind.
+        """)
     
     # File uploader
     uploaded_file = st.file_uploader("Upload a GPX file", type=['gpx'], key="track_analysis_uploader")
@@ -333,16 +346,280 @@ def single_track_analysis():
                 
                 # When displaying the map, pass the estimated wind:
                 with col1:
-                    # Display map
-                    st.subheader("Track Map")
+                    # Display interactive map for segment selection
+                    st.subheader("Track Map (Click segments to select/deselect)")
+                    
+                    # Display the map - this now uses st.component.html which doesn't return segment IDs
+                    # directly but updates session_state via JavaScript
                     display_track_map(gpx_data, stretches, wind_direction, estimated_wind)
+                    
+                    # MOVE SEGMENT SELECTION HERE - RIGHT UNDER THE MAP
+                    # Create a header for segment filters
+                    st.subheader("Segment Selection")
+                    
+                    # Set default filter state
+                    if 'filter_changes' not in st.session_state:
+                        st.session_state.filter_changes = {
+                            'upwind_selected': False,
+                            'downwind_selected': False,
+                            'suspicious_removed': False,
+                            'best_speed_selected': False
+                        }
+                    
+                    # First, make sure filter_changes is initialized
+                    if 'filter_changes' not in st.session_state:
+                        st.session_state.filter_changes = {
+                            'upwind_selected': False,
+                            'downwind_selected': False,
+                            'suspicious_removed': False,
+                            'best_speed_selected': False
+                        }
+                    
+                    # Create a clearer filter section
+                    st.write("**Select Segments:**")
+                    
+                    # Create two rows of buttons for better organization
+                    row1_cols = st.columns(4)
+                    
+                    # 1st row - Selection and type filters
+                    with row1_cols[0]:
+                        if st.button("🔄 All", key="all_btn", help="Select all segments"):
+                            # Reset all filters
+                            st.session_state.filter_changes = {
+                                'upwind_selected': False,
+                                'downwind_selected': False,
+                                'suspicious_removed': False,
+                                'best_speed_selected': False
+                            }
+                            # Select all segments
+                            st.session_state.selected_segments = display_df['original_index'].tolist()
+                            st.experimental_rerun()
+                    
+                    with row1_cols[1]:
+                        if st.button("❌ None", key="none_btn", help="Deselect all segments"):
+                            # Reset all filters
+                            st.session_state.filter_changes = {
+                                'upwind_selected': False,
+                                'downwind_selected': False,
+                                'suspicious_removed': False,
+                                'best_speed_selected': False
+                            }
+                            # Deselect all segments
+                            st.session_state.selected_segments = []
+                            st.experimental_rerun()
+                    
+                    # Use checkboxes instead of buttons for filters
+                    with row1_cols[2]:
+                        upwind = st.checkbox(
+                            "⬆️ Upwind", 
+                            value=st.session_state.filter_changes['upwind_selected'],
+                            key="upwind_check",
+                            help="Include upwind segments"
+                        )
+                        # Update filter state
+                        st.session_state.filter_changes['upwind_selected'] = upwind
+                    
+                    with row1_cols[3]:
+                        downwind = st.checkbox(
+                            "⬇️ Downwind", 
+                            value=st.session_state.filter_changes['downwind_selected'],
+                            key="downwind_check",
+                            help="Include downwind segments"
+                        )
+                        # Update filter state
+                        st.session_state.filter_changes['downwind_selected'] = downwind
+                    
+                    # 2nd row - Quality filters
+                    row2_cols = st.columns(4)
+                    
+                    with row2_cols[0]:
+                        no_suspicious = st.checkbox(
+                            "⚠️ No Suspicious", 
+                            value=st.session_state.filter_changes['suspicious_removed'],
+                            key="suspicious_check",
+                            help="Exclude segments with suspicious angles"
+                        )
+                        # Update filter state
+                        st.session_state.filter_changes['suspicious_removed'] = no_suspicious
+                    
+                    with row2_cols[1]:
+                        fastest = st.checkbox(
+                            "⚡ Fastest Only", 
+                            value=st.session_state.filter_changes['best_speed_selected'],
+                            key="speed_check",
+                            help="Include only the fastest segments"
+                        )
+                        # Update filter state
+                        st.session_state.filter_changes['best_speed_selected'] = fastest
+                    
+                    # Add Apply button in the last column
+                    with row2_cols[3]:
+                        apply_button = st.button("✅ Apply Filters", type="primary", key="apply_filters")
+                    
+                    # Store the segment data in session state if not already there
+                    if 'segment_data' not in st.session_state:
+                        st.session_state.segment_data = stretches.copy()
+                    
+                    # Create a DataFrame with renamed columns for clarity
+                    display_cols = ['sailing_type', 'bearing', 'angle_to_wind', 
+                                  'distance', 'speed', 'duration', 'tack', 'upwind_downwind']
+                    
+                    display_df = stretches[display_cols].copy()
+                    
+                    # Store original index before resetting
+                    display_df['original_index'] = display_df.index
+                    
+                    # Add index as segment ID 
+                    display_df = display_df.reset_index()
+                    
+                    # Flag suspicious values (small angles to wind)
+                    display_df['suspicious'] = display_df['angle_to_wind'] < 15
+                    
+                    # Add a column for segment selection
+                    # Initialize selected_segments with all original indices if not already set
+                    if ('selected_segments' not in st.session_state or 
+                        not isinstance(st.session_state.selected_segments, list)):
+                        # Default to all segments selected - use original indices
+                        st.session_state.selected_segments = display_df['original_index'].tolist()
+                    
+                    # Rename columns to be clearer
+                    display_df = display_df.rename(columns={
+                        'index': 'segment_id',
+                        'bearing': 'heading (°)',
+                        'angle_to_wind': 'angle off wind (°)',
+                        'distance': 'distance (m)',
+                        'speed': 'speed (knots)',
+                        'duration': 'duration (sec)'
+                    })
+                    
+                    # Format for display
+                    for col in ['heading (°)', 'angle off wind (°)']:
+                        display_df[col] = display_df[col].round(1)
+                    display_df['distance (m)'] = display_df['distance (m)'].round(1)
+                    display_df['speed (knots)'] = display_df['speed (knots)'].round(2)
+                    
+                    # Initialize filter indicators
+                    filter_text = []
+                    
+                    # Filter changes are now handled directly by checkboxes
+                    # The checkboxes automatically update st.session_state.filter_changes
+                    
+                    # Apply all filters together to get the correct selection
+                    
+                    # Start with all segments
+                    all_segments = display_df['original_index'].tolist()
+                    filtered_segments = all_segments.copy()
+                    
+                    # Apply direction filters if active
+                    if st.session_state.filter_changes['upwind_selected'] and not st.session_state.filter_changes['downwind_selected']:
+                        # Only include upwind segments
+                        upwind_segments = display_df[display_df['upwind_downwind'] == 'Upwind']['original_index'].tolist()
+                        filtered_segments = [s for s in filtered_segments if s in upwind_segments]
+                        filter_text.append("Upwind only")
+                    elif st.session_state.filter_changes['downwind_selected'] and not st.session_state.filter_changes['upwind_selected']:
+                        # Only include downwind segments
+                        downwind_segments = display_df[display_df['upwind_downwind'] == 'Downwind']['original_index'].tolist()
+                        filtered_segments = [s for s in filtered_segments if s in downwind_segments]
+                        filter_text.append("Downwind only")
+                    elif st.session_state.filter_changes['upwind_selected'] and st.session_state.filter_changes['downwind_selected']:
+                        # Both selected means all segments (no direction filtering)
+                        filter_text.append("All directions")
+                    
+                    # Apply suspicious filter if active
+                    if st.session_state.filter_changes['suspicious_removed']:
+                        # Identify suspicious segments (angle_to_wind < 15°)
+                        suspicious_segments = display_df[display_df['suspicious']]['original_index'].tolist()
+                        
+                        if suspicious_segments:
+                            # Get the logger from global scope
+                            logger.info(f"Removing {len(suspicious_segments)} suspicious segments: {suspicious_segments}")
+                            
+                            # Remove suspicious segments
+                            filtered_segments = [s for s in filtered_segments if s not in suspicious_segments]
+                            
+                            # Double-check results
+                            still_suspicious = [s for s in filtered_segments if s in suspicious_segments]
+                            if still_suspicious:
+                                logger.error(f"Failed to remove suspicious segments: {still_suspicious}")
+                            
+                        filter_text.append("No suspicious angles")
+                    
+                    # Apply speed filter if active
+                    if st.session_state.filter_changes['best_speed_selected']:
+                        # Get the top 25% segments by speed
+                        speed_threshold = display_df['speed (knots)'].quantile(0.75)
+                        fast_segments = display_df[display_df['speed (knots)'] >= speed_threshold]['original_index'].tolist()
+                        filtered_segments = [s for s in filtered_segments if s in fast_segments]
+                        filter_text.append(f"Fastest (>{speed_threshold:.1f} knots)")
+                    
+                    # Update the selected segments to contain the original indices
+                    st.session_state.selected_segments = filtered_segments
+                        
+                    # Add filter indicator UI with better styling
+                    if filter_text:
+                        st.success(f"**Active filters:** {', '.join(filter_text)}")
+                    else:
+                        st.info("**No filters active** - showing all segments")
+                    
+                    # Apply immediately when button is clicked
+                    if apply_button:
+                        st.experimental_rerun()
+                    
+                    # Show selection stats - only if we have valid selected_segments in session state
+                    if ('selected_segments' in st.session_state and 
+                        isinstance(st.session_state.selected_segments, list) and 
+                        len(st.session_state.selected_segments) > 0):
+                        
+                        selected_count = len(st.session_state.selected_segments)
+                        total_count = len(stretches)
+                        selection_percentage = (selected_count / total_count) * 100
+                        st.caption(f"Selected {selected_count} of {total_count} segments ({selection_percentage:.1f}%)")
+                    
+                    # Add a warning for suspicious values
+                    if display_df['suspicious'].any():
+                        suspicious_count = display_df['suspicious'].sum()
+                        suspicious_segments = display_df[display_df['suspicious']]['original_index'].tolist()
+                        suspicious_angles = display_df[display_df['suspicious']]['angle off wind (°)'].tolist()
+                        
+                        angles_text = ", ".join([f"{angle:.1f}°" for angle in suspicious_angles])
+                        
+                        st.warning(
+                            f"⚠️ {suspicious_count} segments have suspiciously small angles to wind (< 15°): {angles_text}. " +
+                            f"These are shown with dashed lines on the map."
+                        )
+                    
+                    # Calculate average angle from selected segments
+                    from utils.calculations import calculate_average_angle_from_segments
+                    
+                    if ('selected_segments' in st.session_state and 
+                        isinstance(st.session_state.selected_segments, list) and 
+                        len(st.session_state.selected_segments) > 0):
+                        
+                        filtered_stretches = stretches.loc[stretches.index.isin(st.session_state.selected_segments)]
+                        angle_results = calculate_average_angle_from_segments(filtered_stretches)
+                        
+                        # Display angle calculation results
+                        if angle_results['average_angle'] is not None:
+                            st.info(f"Average angle off the wind: **{angle_results['average_angle']:.1f}°**")
+                            
+                            # Show tack-specific info
+                            if angle_results['port_count'] > 0 and angle_results['starboard_count'] > 0:
+                                st.caption(f"Port avg: {angle_results['port_average']:.1f}° ({angle_results['port_count']} segments)")
+                                st.caption(f"Starboard avg: {angle_results['starboard_average']:.1f}° ({angle_results['starboard_count']} segments)")
+                            elif angle_results['port_count'] > 0:
+                                st.caption(f"Using only Port tack data ({angle_results['port_count']} segments)")
+                            elif angle_results['starboard_count'] > 0:
+                                st.caption(f"Using only Starboard tack data ({angle_results['starboard_count']} segments)")
                 
                 with col2:
                     # Use the filtered segments for visualization
                     st.subheader("Polar Performance")
                     
                     # Get the filtered stretches for visualization
-                    if 'selected_segments' in st.session_state and len(st.session_state.selected_segments) > 0:
+                    if ('selected_segments' in st.session_state and 
+                        isinstance(st.session_state.selected_segments, list) and 
+                        len(st.session_state.selected_segments) > 0):
+                        
                         filtered_stretches = stretches.loc[stretches.index.isin(st.session_state.selected_segments)]
                         source_note = f"(using {len(filtered_stretches)} selected segments)"
                     else:
@@ -356,22 +633,28 @@ def single_track_analysis():
                     else:
                         st.info("Not enough data for polar plot (need at least 3 segments)")
                 
-                # Display explanation of angles
-                st.subheader("Wind Angle Explanation")
-                st.markdown("""
-                The angles shown below are measured as **degrees off the wind direction**:
-                - **0°** means sailing directly into the wind (impossible)
-                - **45°** is a typical upwind angle
-                - **90°** is sailing across the wind (beam reach)
-                - **180°** is sailing directly downwind
+                # Wind angle explanation moved to sidebar
                 
-                Smaller angles are better for upwind performance, larger angles are better for downwind.
-                """)
-                
-                # Display upwind/downwind analysis
+                # Display upwind/downwind analysis based on selected segments
                 st.subheader("Wind Angle Analysis")
-                upwind = stretches[stretches['angle_to_wind'] < 90]
-                downwind = stretches[stretches['angle_to_wind'] >= 90]
+                
+                # Get the filtered stretches for analysis
+                if ('selected_segments' in st.session_state and 
+                    isinstance(st.session_state.selected_segments, list) and 
+                    len(st.session_state.selected_segments) > 0):
+                    
+                    analysis_stretches = stretches.loc[stretches.index.isin(st.session_state.selected_segments)]
+                    source_note = f"(based on {len(analysis_stretches)} selected segments)"
+                else:
+                    analysis_stretches = stretches
+                    source_note = f"(based on all {len(stretches)} segments)"
+                
+                # Add note about which segments are being used
+                st.caption(source_note)
+                
+                # Split into upwind/downwind
+                upwind = analysis_stretches[analysis_stretches['angle_to_wind'] < 90]
+                downwind = analysis_stretches[analysis_stretches['angle_to_wind'] >= 90]
                 
                 if not upwind.empty or not downwind.empty:
                     col1, col2 = st.columns(2)
@@ -398,7 +681,7 @@ def single_track_analysis():
                                         f"{best_stbd['speed']:.1f} knots")
                                 st.caption(f"Bearing: {best_stbd['bearing']:.1f}°")
                         else:
-                            st.info("No upwind data detected")
+                            st.info("No upwind data in selection")
                     
                     with col2:
                         st.markdown("#### Downwind Performance")
@@ -422,15 +705,45 @@ def single_track_analysis():
                                         f"{best_stbd['speed']:.1f} knots")
                                 st.caption(f"Bearing: {best_stbd['bearing']:.1f}°")
                         else:
-                            st.info("No downwind data detected")
+                            st.info("No downwind data in selection")
+                else:
+                    st.warning("No valid segments in current selection. Please select at least one segment.")
                 
-                # Plot bearing distribution
+                # Plot bearing distribution based on selected segments
                 st.subheader("Bearing Distribution")
-                fig = plot_bearing_distribution(stretches, wind_direction)
-                st.pyplot(fig)
                 
-                # Display data table with selection options
-                st.subheader(f"Detected Segments ({len(stretches)})")
+                # Use the same filtered stretches for the plot
+                if ('selected_segments' in st.session_state and 
+                    isinstance(st.session_state.selected_segments, list) and 
+                    len(st.session_state.selected_segments) > 0):
+                    
+                    filtered_stretches = stretches.loc[stretches.index.isin(st.session_state.selected_segments)]
+                    source_note = f"(based on {len(filtered_stretches)} selected segments)"
+                else:
+                    filtered_stretches = stretches
+                    source_note = f"(based on all {len(stretches)} segments)"
+                
+                # Add note about which segments are being used
+                if len(filtered_stretches) > 0:
+                    fig = plot_bearing_distribution(filtered_stretches, wind_direction)
+                    st.pyplot(fig)
+                    st.caption(source_note)
+                else:
+                    st.warning("No segments selected for bearing distribution plot.")
+                
+                # Display more prominent segment selection UI
+                st.subheader("Segment Selection")
+                
+                # Set default filter state
+                if 'filter_changes' not in st.session_state:
+                    st.session_state.filter_changes = {
+                        'upwind_selected': False,
+                        'downwind_selected': False,
+                        'suspicious_removed': False,
+                        'best_speed_selected': False
+                    }
+                
+                # Filter buttons are now in the main UI above, so no need for duplicate buttons here
                 
                 # Store the segment data in session state if not already there
                 if 'segment_data' not in st.session_state:
@@ -438,20 +751,25 @@ def single_track_analysis():
                 
                 # Create a DataFrame with renamed columns for clarity
                 display_cols = ['sailing_type', 'bearing', 'angle_to_wind', 
-                              'distance', 'speed', 'duration']
+                              'distance', 'speed', 'duration', 'tack', 'upwind_downwind']
                 
                 display_df = stretches[display_cols].copy()
                 
-                # Add index as segment ID
+                # Store original index before resetting
+                display_df['original_index'] = display_df.index
+                
+                # Add index as segment ID 
                 display_df = display_df.reset_index()
                 
                 # Flag suspicious values (small angles to wind)
                 display_df['suspicious'] = display_df['angle_to_wind'] < 15
                 
                 # Add a column for segment selection
-                if 'selected_segments' not in st.session_state:
-                    # Default to all segments selected
-                    st.session_state.selected_segments = display_df.index.tolist()
+                # Initialize selected_segments with all original indices if not already set
+                if ('selected_segments' not in st.session_state or 
+                    not isinstance(st.session_state.selected_segments, list)):
+                    # Default to all segments selected - use original indices
+                    st.session_state.selected_segments = display_df['original_index'].tolist()
                 
                 # Rename columns to be clearer
                 display_df = display_df.rename(columns={
@@ -469,59 +787,176 @@ def single_track_analysis():
                 display_df['distance (m)'] = display_df['distance (m)'].round(1)
                 display_df['speed (knots)'] = display_df['speed (knots)'].round(2)
                 
+                # Initialize filter indicators
+                filter_text = []
+                
+                # Apply all filters together to get the correct selection
+                
+                # Start with all segments
+                all_segments = display_df['segment_id'].tolist()
+                filtered_segments = all_segments.copy()
+                
+                # Apply direction filters if active
+                if st.session_state.filter_changes['upwind_selected'] and not st.session_state.filter_changes['downwind_selected']:
+                    # Only include upwind segments
+                    upwind_segments = display_df[display_df['upwind_downwind'] == 'Upwind']['segment_id'].tolist()
+                    filtered_segments = [s for s in filtered_segments if s in upwind_segments]
+                    filter_text.append("Upwind only")
+                elif st.session_state.filter_changes['downwind_selected'] and not st.session_state.filter_changes['upwind_selected']:
+                    # Only include downwind segments
+                    downwind_segments = display_df[display_df['upwind_downwind'] == 'Downwind']['segment_id'].tolist()
+                    filtered_segments = [s for s in filtered_segments if s in downwind_segments]
+                    filter_text.append("Downwind only")
+                elif st.session_state.filter_changes['upwind_selected'] and st.session_state.filter_changes['downwind_selected']:
+                    # Both selected means all segments (no direction filtering)
+                    filter_text.append("All directions")
+                
+                # Apply suspicious filter if active
+                if st.session_state.filter_changes['suspicious_removed']:
+                    # Identify suspicious segments (angle_to_wind < 15°)
+                    suspicious_segments = display_df[display_df['suspicious']]['segment_id'].tolist()
+                    
+                    if suspicious_segments:
+                        # Get the logger from global scope
+                        logger.info(f"Removing {len(suspicious_segments)} suspicious segments: {suspicious_segments}")
+                        
+                        # Remove suspicious segments
+                        filtered_segments = [s for s in filtered_segments if s not in suspicious_segments]
+                        
+                        # Double-check results
+                        still_suspicious = [s for s in filtered_segments if s in suspicious_segments]
+                        if still_suspicious:
+                            logger.error(f"Failed to remove suspicious segments: {still_suspicious}")
+                        
+                    filter_text.append("No suspicious angles")
+                
+                # Apply speed filter if active
+                if st.session_state.filter_changes['best_speed_selected']:
+                    # Get the top 25% segments by speed
+                    speed_threshold = display_df['speed (knots)'].quantile(0.75)
+                    fast_segments = display_df[display_df['speed (knots)'] >= speed_threshold]['segment_id'].tolist()
+                    filtered_segments = [s for s in filtered_segments if s in fast_segments]
+                    filter_text.append(f"Fastest (>{speed_threshold:.1f} knots)")
+                
+                # Map segment IDs back to original indices for proper filtering of stretches DataFrame
+                selected_original_indices = display_df[display_df['segment_id'].isin(filtered_segments)]['original_index'].tolist()
+                
+                # Update the selected segments to contain the original indices
+                st.session_state.selected_segments = selected_original_indices
+                    
+                # Add filter indicator UI with better styling
+                if filter_text:
+                    st.success(f"**Active filters:** {', '.join(filter_text)}")
+                else:
+                    st.info("**No filters active** - showing all segments")
+                
                 # Add a warning for suspicious values
                 if display_df['suspicious'].any():
                     st.warning(f"⚠️ {display_df['suspicious'].sum()} segments have suspiciously small angles to wind (< 15°). " +
-                              f"Consider deselecting these segments or adjusting the wind direction.")
+                              f"These segments are shown with dashed lines on the map. Consider deselecting them or adjusting the wind direction.")
                 
-                # Use checkboxes for segment selection
-                with st.expander("Select which segments to include in analysis", expanded=False):
-                    # Add buttons for quick selection
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        if st.button("Select All"):
-                            st.session_state.selected_segments = display_df['segment_id'].tolist()
-                    with col2:
-                        if st.button("Deselect Suspicious"):
-                            st.session_state.selected_segments = display_df[~display_df['suspicious']]['segment_id'].tolist()
-                    
-                    # Show the segments with checkboxes
-                    selected_segments = []
-                    
-                    for i, row in display_df.iterrows():
-                        segment_id = row['segment_id']
-                        angle = row['angle off wind (°)']
-                        speed = row['speed (knots)']
-                        type_str = row['sailing_type']
-                        is_suspicious = row['suspicious']
-                        
-                        # Format the label based on whether it's suspicious
-                        if is_suspicious:
-                            label = f"⚠️ Segment {segment_id}: {type_str}, {angle}° off wind, {speed} knots"
-                        else:
-                            label = f"Segment {segment_id}: {type_str}, {angle}° off wind, {speed} knots"
-                        
-                        # Create a checkbox for each segment
-                        is_selected = st.checkbox(
-                            label, 
-                            value=segment_id in st.session_state.selected_segments,
-                            key=f"segment_{segment_id}"
-                        )
-                        
-                        if is_selected:
-                            selected_segments.append(segment_id)
-                    
-                    # Update session state with selected segments
-                    st.session_state.selected_segments = selected_segments
+                # Display summary of current selection
+                if (isinstance(st.session_state.selected_segments, list)):
+                    selected_count = len(st.session_state.selected_segments)
+                    total_count = len(display_df)
+                else:
+                    selected_count = 0
+                    total_count = len(display_df)
                 
-                # Use only the selected segments for display and analysis
+                # Add a button to apply filter and refresh
+                col_refresh = st.columns([3, 1])
+                with col_refresh[1]:
+                    if st.button("Apply & Refresh"):
+                        # This will trigger a re-run with current selections
+                        st.experimental_rerun()
+                
+                if selected_count > 0:
+                    # Get stats on the selected segments
+                    selected_df = display_df[display_df['segment_id'].isin(st.session_state.selected_segments)]
+                    
+                    # Count by type
+                    upwind_count = sum(selected_df['upwind_downwind'] == 'Upwind')
+                    downwind_count = sum(selected_df['upwind_downwind'] == 'Downwind')
+                    port_count = sum(selected_df['tack'] == 'Port')
+                    starboard_count = sum(selected_df['tack'] == 'Starboard')
+                    
+                    # Display selection summary
+                    with col_refresh[0]:
+                        st.info(f"Selected {selected_count} of {total_count} segments: " + 
+                            f"{upwind_count} upwind, {downwind_count} downwind, " +
+                            f"{port_count} port, {starboard_count} starboard")
+                else:
+                    with col_refresh[0]:
+                        st.warning("No segments selected. Use the buttons above to select segments.")
+                
+                # Show detailed segment selection with checkboxes
+                with st.expander("Detailed Segment Selection", expanded=False):
+                    # Show the segments grouped by type with checkboxes
+                    st.write("**Select individual segments:**")
+                    
+                    # Group by sailing type for better organization
+                    segment_types = display_df['sailing_type'].unique()
+                    
+                    for sailing_type in segment_types:
+                        st.write(f"**{sailing_type}:**")
+                        
+                        # Get segments of this type
+                        type_segments = display_df[display_df['sailing_type'] == sailing_type]
+                        
+                        # Show in 3 columns
+                        check_cols = st.columns(3)
+                        
+                        # Distribute segments across columns
+                        segments_per_col = len(type_segments) // 3 + 1
+                        
+                        col_idx = 0
+                        segment_count = 0
+                        
+                        for i, row in type_segments.iterrows():
+                            segment_id = row['segment_id']
+                            angle = row['angle off wind (°)']
+                            speed = row['speed (knots)']
+                            is_suspicious = row['suspicious']
+                            
+                            # Switch to next column if needed
+                            if segment_count >= segments_per_col:
+                                col_idx = (col_idx + 1) % 3
+                                segment_count = 0
+                            
+                            # Format the label based on whether it's suspicious
+                            if is_suspicious:
+                                label = f"⚠️ #{segment_id}: {angle}°, {speed}kn"
+                            else:
+                                label = f"#{segment_id}: {angle}°, {speed}kn"
+                            
+                            # Create a checkbox for each segment in the appropriate column
+                            with check_cols[col_idx]:
+                                is_selected = st.checkbox(
+                                    label, 
+                                    value=segment_id in st.session_state.selected_segments,
+                                    key=f"segment_{segment_id}"
+                                )
+                                
+                                # Update selection
+                                if is_selected and segment_id not in st.session_state.selected_segments:
+                                    st.session_state.selected_segments.append(segment_id)
+                                elif not is_selected and segment_id in st.session_state.selected_segments:
+                                    st.session_state.selected_segments.remove(segment_id)
+                            
+                            segment_count += 1
+                
+                # Display segment data table
+                st.subheader(f"Segment Data")
+                
+                # Use only the selected segments for display
                 filtered_display_df = display_df[display_df['segment_id'].isin(st.session_state.selected_segments)]
                 
-                if len(filtered_display_df) < len(display_df):
-                    st.info(f"Showing {len(filtered_display_df)} of {len(display_df)} segments (filtered by selection)")
-                
                 # Show the filtered dataframe
-                st.dataframe(filtered_display_df.drop(['suspicious'], axis=1))
+                display_cols = ['segment_id', 'sailing_type', 'heading (°)', 'angle off wind (°)', 
+                               'speed (knots)', 'distance (m)', 'duration (sec)']
+                
+                if not filtered_display_df.empty:
+                    st.dataframe(filtered_display_df[display_cols], use_container_width=True)
                 
                 # Data download
                 csv = stretches.to_csv(index=False)

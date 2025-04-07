@@ -4,8 +4,30 @@ from streamlit_folium import folium_static
 import numpy as np
 from matplotlib.colors import LinearSegmentedColormap
 
-def display_track_map(gpx_data, stretches, wind_direction, estimated_wind=None):
-    """Display a map with color-coded track segments."""
+def display_track_map(gpx_data, stretches, wind_direction, estimated_wind=None, selected_segments=None):
+    """
+    Display a map with color-coded track segments that allows segment selection.
+    
+    Parameters:
+    - gpx_data: DataFrame with track data
+    - stretches: DataFrame with segment data
+    - wind_direction: Wind direction in degrees
+    - estimated_wind: Estimated wind direction (optional)
+    - selected_segments: List of segment IDs that are currently selected
+    
+    Returns:
+    - List of selected segment IDs
+    """
+    import json
+    import streamlit as st
+    import streamlit.components.v1 as components
+    
+    # Use selected_segments from session state if not provided
+    if selected_segments is None and 'selected_segments' in st.session_state:
+        selected_segments = st.session_state.selected_segments
+    elif selected_segments is None:
+        selected_segments = stretches.index.tolist()  # Default to all selected
+    
     # Create the map
     m = folium.Map()
     
@@ -22,7 +44,7 @@ def display_track_map(gpx_data, stretches, wind_direction, estimated_wind=None):
     }
     
     # Add each consistent stretch with color coding
-    for _, stretch in stretches.iterrows():
+    for idx, stretch in stretches.iterrows():
         start_idx = stretch['start_idx']
         end_idx = stretch['end_idx']
         
@@ -32,17 +54,32 @@ def display_track_map(gpx_data, stretches, wind_direction, estimated_wind=None):
         
         sailing_type = stretch['sailing_type']
         color = colors.get(sailing_type, 'green')
+        is_selected = idx in selected_segments
+        is_suspicious = float(stretch['angle_to_wind']) < 15
+        
+        # Set appearance based on selection and suspiciousness
+        weight = 5 if is_selected else 2
+        opacity = 0.9 if is_selected else 0.4
+        
+        # Different styles for suspicious segments
+        dash_array = None
+        if is_suspicious:
+            dash_array = "5, 5"
         
         tooltip = (f"{sailing_type}: {stretch['bearing']:.1f}° " 
                  f"(Wind angle: {stretch['angle_to_wind']:.1f}°, "
                  f"Speed: {stretch['speed']:.1f} knots)")
         
+        if is_suspicious:
+            tooltip += "\n⚠️ SUSPICIOUS ANGLE"
+        
         folium.PolyLine(
             track_segment, 
             color=color, 
-            weight=4, 
-            opacity=0.8,
-            tooltip=tooltip
+            weight=weight, 
+            opacity=opacity,
+            tooltip=tooltip,
+            dash_array=dash_array
         ).add_to(m)
     
     # Calculate center of the map
@@ -107,29 +144,53 @@ def display_track_map(gpx_data, stretches, wind_direction, estimated_wind=None):
     ne = gpx_data[['latitude', 'longitude']].max().values.tolist()
     m.fit_bounds([sw, ne])
     
-    # Add legend with explanations
+    # Add a more compact legend in a proper position
     legend_html = f'''
-    <div style="position: fixed; bottom: 50px; left: 50px; z-index: 1000; background-color: white; 
-    padding: 10px; border: 2px solid grey; border-radius: 5px;">
-    <p><b>Legend</b></p>
-    <p><i style="background: #FF0000; width: 20px; height: 4px; display: inline-block;"></i> Port Upwind</p>
-    <p><i style="background: #0000FF; width: 20px; height: 4px; display: inline-block;"></i> Starboard Upwind</p>
-    <p><i style="background: #FF8C00; width: 20px; height: 4px; display: inline-block;"></i> Port Downwind</p>
-    <p><i style="background: #800080; width: 20px; height: 4px; display: inline-block;"></i> Starboard Downwind</p>
-    <p><i style="background: lightgray; width: 20px; height: 2px; display: inline-block;"></i> Full Track</p>
-    <p><b>Wind Direction:</b> {wind_direction}°</p>
-    {f'<p><b>Estimated Wind:</b> {estimated_wind:.1f}°</p>' if estimated_wind is not None else ''}
-    <hr/>
-    <p><b>Note:</b> Wind angles are degrees <i>off the wind direction</i></p>
-    <p>- Upwind: <45° ideal for pointing, <90° total</p>
-    <p>- Downwind: >90° running, ~180° directly away</p>
-    <p>- Port/Starboard: tack relative to wind</p>
+    <div style="position: absolute; top: 10px; right: 10px; z-index: 1000; background-color: white; 
+    padding: 10px; border: 2px solid grey; border-radius: 5px; max-width: 300px; font-size: 12px;">
+    <p style="font-weight: bold; margin: 0 0 5px 0;">Legend</p>
+    <div style="display: grid; grid-template-columns: auto auto; grid-gap: 5px; margin-bottom: 5px;">
+        <span><i style="background: #FF0000; width: 20px; height: 4px; display: inline-block;"></i> Port Upwind</span>
+        <span><i style="background: #0000FF; width: 20px; height: 4px; display: inline-block;"></i> Starboard Upwind</span>
+        <span><i style="background: #FF8C00; width: 20px; height: 4px; display: inline-block;"></i> Port Downwind</span>
+        <span><i style="background: #800080; width: 20px; height: 4px; display: inline-block;"></i> Starboard Downwind</span>
+    </div>
+    <div style="margin-bottom: 5px;">
+        <span><i style="background: lightgray; width: 20px; height: 2px; display: inline-block;"></i> Full Track</span>
+        <span style="margin-left: 10px;"><i style="border: 1px dashed gray; width: 20px; height: 0px; display: inline-block;"></i> Suspicious</span>
+    </div>
+    <p style="margin: 0;"><b>Wind Direction:</b> {wind_direction}°</p>
+    {f'<p style="margin: 0;"><b>Estimated Wind:</b> {estimated_wind:.1f}°</p>' if estimated_wind is not None else ''}
     </div>
     '''
+    
+    # Add the legend to the map
     m.get_root().html.add_child(folium.Element(legend_html))
     
-    # Display the map
-    folium_static(m)
+    # Add a separate info box for wind explanation at the bottom
+    info_html = f'''
+    <div style="position: absolute; bottom: 10px; left: 10px; z-index: 1000; background-color: white; 
+    padding: 10px; border: 2px solid grey; border-radius: 5px; max-width: 300px; font-size: 12px;">
+    <p style="font-weight: bold; margin: 0 0 5px 0;">Wind Angles</p>
+    <p style="margin: 0 0 5px 0;">Wind angles are degrees <i>off the wind direction</i>:</p>
+    <ul style="margin: 0; padding-left: 20px;">
+      <li>Upwind: <45° ideal, <90° total</li>
+      <li>Downwind: >90° running</li>
+      <li>Port/Starboard: tack relative to wind</li>
+    </ul>
+    </div>
+    '''
+    m.get_root().html.add_child(folium.Element(info_html))
+    
+    # We're not using JavaScript for selection since it's not working reliably
+    # Instead, we'll rely on the checkbox UI for selection
+    
+    # Display the map with folium_static - reverting to simpler method for now
+    # since the JavaScript interaction isn't working correctly
+    folium_static(m, height=600, width=800)
+    
+    # We don't return anything
+    return None
 
 def plot_polar_diagram(stretches, wind_direction):
     """Create a polar plot showing sailing performance at different angles to wind."""
