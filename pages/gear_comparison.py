@@ -920,6 +920,7 @@ def process_bulk_upload(uploaded_files):
             min_speed = 10.0  # knots
             min_speed_ms = min_speed * 0.514444  # Convert knots to m/s
             active_speed_threshold = 5.0  # knots
+            suspicious_angle_threshold = 20  # Default from main page - exclude suspicious angles
             
             # Calculate metrics
             metrics = calculate_track_metrics(gpx_data, min_speed_knots=active_speed_threshold)
@@ -956,6 +957,22 @@ def process_bulk_upload(uploaded_files):
             # Calculate angles relative to wind
             stretches = analyze_wind_angles(stretches, estimated_wind)
             
+            # Filter out suspicious angles (less than threshold from wind direction)
+            # This is the default in the main analysis page
+            suspicious_stretches = stretches[stretches['angle_to_wind'] < suspicious_angle_threshold]
+            if not suspicious_stretches.empty:
+                # Keep only non-suspicious stretches
+                stretches = stretches[stretches['angle_to_wind'] >= suspicious_angle_threshold]
+                
+                # Add note about filtering
+                filtered_note = f"Auto-imported from {uploaded_file.name}\nFiltered out {len(suspicious_stretches)} suspicious segments (angles < {suspicious_angle_threshold}°)"
+            else:
+                filtered_note = f"Auto-imported from {uploaded_file.name}"
+            
+            # Skip if all stretches were suspicious
+            if stretches.empty:
+                continue
+            
             # Create session data
             session_data = {
                 'id': len(st.session_state.gear_comparison_data) + 1,
@@ -969,7 +986,7 @@ def process_bulk_upload(uploaded_files):
                 'wing': '',
                 'location': '',
                 'conditions': '',
-                'notes': f"Auto-imported from {uploaded_file.name}",
+                'notes': filtered_note,
                 'metrics': metrics,
                 'stretches': stretches
             }
@@ -1002,7 +1019,15 @@ def show_session_list(session_data_list):
         **How it works:**
         1. Files will be processed with default settings
         2. Wind direction will be auto-estimated
-        3. Sessions can be edited later to add details like gear info
+        3. Suspicious angles (< 20°) will be automatically filtered out
+        4. Sessions can be edited later to add details like gear info
+        
+        **Default Settings:**
+        - Angle tolerance: 12°
+        - Min duration: 10 seconds
+        - Min distance: 50 meters
+        - Min speed: 10 knots
+        - Suspicious angle threshold: 20°
         """)
         
         uploaded_files = st.file_uploader(
