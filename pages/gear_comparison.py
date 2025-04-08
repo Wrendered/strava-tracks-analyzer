@@ -4,6 +4,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import logging
 import os
+import json
+from datetime import datetime
 
 # Configure logging
 logging.basicConfig(
@@ -16,10 +18,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-from utils.gpx_parser import load_gpx_file
-from utils.calculations import calculate_track_metrics
-from utils.analysis import find_consistent_angle_stretches, analyze_wind_angles, estimate_wind_direction
-from utils.visualization import plot_bearing_distribution, plot_polar_diagram
+from utils.visualization import plot_polar_diagram
 
 
 def create_combined_polars(gear1_stretches, gear2_stretches, gear1_name, gear2_name, wind_direction1, wind_direction2):
@@ -71,16 +70,9 @@ def create_combined_polars(gear1_stretches, gear2_stretches, gear1_name, gear2_n
     # Position the legend at the top to avoid overlapping with the text
     fig.legend(handles=legend_elements, loc='upper center', bbox_to_anchor=(0.5, 0.96), ncol=2)
     
-    # Add explanatory text with better spacing
-    plt.figtext(0.5, 0.01, 
-               "These polar plots show speed (radius) at different angles to the wind.\n" +
-               "0° is directly into the wind (top), 90° is across (sides), 180° is directly downwind (bottom).\n" +
-               "Marker size indicates distance sailed at this angle/speed combination.",
-               ha='center', fontsize=9, wrap=True)
-    
     # Adjust layout - increase bottom margin to give text more room
     plt.tight_layout()
-    plt.subplots_adjust(bottom=0.17, top=0.90)
+    plt.subplots_adjust(bottom=0.09, top=0.90)
     
     return fig
 
@@ -89,7 +81,7 @@ def plot_port_polar(ax, gear1_stretches, gear2_stretches, gear1_name, gear2_name
     """Plot port tack data for both gears on the same axis."""
     # Set up the polar plot
     ax.set_theta_zero_location('N')  # 0 degrees at the top
-    ax.set_theta_direction(-1)  # clockwise
+    ax.set_theta_direction(1)  # counter-clockwise (mirrored)
     
     # Set the theta limits to 0-180 degrees (only show the top half)
     ax.set_thetamin(0)
@@ -190,80 +182,6 @@ def plot_tack_data(ax, tack_data, color, marker='o', alpha=0.7):
         color=color, s=norm_weights, alpha=alpha, 
         marker=marker, edgecolors='none'
     )
-
-
-def create_polar_comparison_section(stretches1, stretches2, gear1_name, gear2_name, wind_direction1, wind_direction2):
-    """Create a comparative analysis section with polar plot and statistics."""
-    if stretches1.empty or stretches2.empty:
-        st.warning("Need data for both gear types to perform comparison")
-        return
-    
-    # Add key headline stats at the top
-    st.write("### Key Performance Highlights")
-    
-    # Calculate headline metrics
-    headline_metrics = calculate_headline_metrics(stretches1, stretches2, gear1_name, gear2_name)
-    
-    # Display headline metrics in 4 columns
-    cols = st.columns(4)
-    
-    with cols[0]:  # Upwind Angle
-        better_upwind = headline_metrics['better_upwind']
-        st.metric(
-            "Better Upwind",
-            f"{better_upwind['name']}",
-            f"{better_upwind['angle']:.1f}° to wind",
-            help="Gear that points closer to the wind (smaller angle is better for upwind)"
-        )
-    
-    with cols[1]:  # Upwind Speed
-        faster_upwind = headline_metrics['faster_upwind']
-        st.metric(
-            "Faster Upwind",
-            f"{faster_upwind['name']}",
-            f"{faster_upwind['speed']:.1f} knots",
-            help="Gear with higher average speed when sailing upwind"
-        )
-    
-    with cols[2]:  # Downwind Angle
-        better_downwind = headline_metrics['better_downwind']
-        st.metric(
-            "Better Downwind",
-            f"{better_downwind['name']}",
-            f"{better_downwind['angle']:.1f}° to wind",
-            help="Gear that sails deeper downwind (larger angle is better for downwind)"
-        )
-        
-    with cols[3]:  # Downwind Speed
-        faster_downwind = headline_metrics['faster_downwind']
-        st.metric(
-            "Faster Downwind",
-            f"{faster_downwind['name']}",
-            f"{faster_downwind['speed']:.1f} knots",
-            help="Gear with higher average speed when sailing downwind"
-        )
-    
-    # Plot the comparative polar diagram
-    st.write("### Polar Performance Comparison")
-    fig = create_combined_polars(
-        stretches1, stretches2, gear1_name, gear2_name, wind_direction1, wind_direction2
-    )
-    st.pyplot(fig)
-    
-    # Extract upwind/downwind metrics for both gear types
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.write(f"#### {gear1_name} Performance Metrics")
-        create_gear_metrics_table(stretches1)
-        
-    with col2:
-        st.write(f"#### {gear2_name} Performance Metrics") 
-        create_gear_metrics_table(stretches2)
-    
-    # Show direct comparisons between the two gear types
-    st.write("### Head-to-Head Comparison")
-    create_comparison_table(stretches1, stretches2, gear1_name, gear2_name)
 
 
 def calculate_headline_metrics(stretches1, stretches2, gear1_name, gear2_name):
@@ -403,7 +321,7 @@ def calculate_headline_metrics(stretches1, stretches2, gear1_name, gear2_name):
     return results
 
 
-def create_gear_metrics_table(stretches):
+def create_gear_metrics_table(stretches, gear_info=None):
     """Create a metrics table for a single gear type."""
     if stretches.empty:
         st.info("No data available")
@@ -415,6 +333,21 @@ def create_gear_metrics_table(stretches):
     
     # Calculate metrics
     metrics = {}
+    
+    # Add gear info if available
+    if gear_info:
+        if gear_info.get('board'):
+            metrics["Board"] = gear_info['board']
+        if gear_info.get('foil'):
+            metrics["Foil"] = gear_info['foil']
+        if gear_info.get('wing'):
+            metrics["Wing"] = gear_info['wing']
+        if gear_info.get('wind_speed') and gear_info['wind_speed'] > 0:
+            metrics["Wind Speed"] = f"{gear_info['wind_speed']} knots"
+        if gear_info.get('wind_range'):
+            metrics["Wind Range"] = gear_info['wind_range']
+        if gear_info.get('conditions'):
+            metrics["Conditions"] = gear_info['conditions']
     
     # Overall
     metrics["Overall Max Speed"] = f"{stretches['speed'].max():.1f} knots"
@@ -454,24 +387,41 @@ def create_gear_metrics_table(stretches):
     df = pd.DataFrame(list(metrics.items()), columns=["Metric", "Value"])
     
     # Add section headers for clarity
-    section_indices = {}
-    if "Overall Max Speed" in metrics:
-        section_indices["OVERALL"] = 0
+    sections = []
     
-    if "Upwind - Best Pointing" in metrics:
-        section_indices["UPWIND"] = df[df["Metric"] == "Upwind - Best Pointing"].index[0]
-        
-    if "Downwind - Deepest Run" in metrics:
-        section_indices["DOWNWIND"] = df[df["Metric"] == "Downwind - Deepest Run"].index[0]
+    # Gear info section if available
+    if any(k in metrics for k in ["Board", "Foil", "Wing", "Wind Speed", "Wind Range", "Conditions"]):
+        gear_keys = ["Board", "Foil", "Wing", "Wind Speed", "Wind Range", "Conditions"]
+        gear_metrics = {k: v for k, v in metrics.items() if k in gear_keys}
+        if gear_metrics:
+            sections.append(("GEAR INFO", gear_metrics))
+    
+    # Performance metrics
+    perf_keys = ["Overall Max Speed", "Overall Avg Speed"]
+    perf_metrics = {k: v for k, v in metrics.items() if k in perf_keys}
+    if perf_metrics:
+        sections.append(("OVERALL", perf_metrics))
+    
+    # Upwind metrics
+    upwind_keys = ["Upwind - Best Pointing", "Upwind - Fastest", "Upwind - Avg Speed"]
+    upwind_metrics = {k: v for k, v in metrics.items() if k in upwind_keys}
+    if upwind_metrics:
+        sections.append(("UPWIND", upwind_metrics))
+    
+    # Downwind metrics
+    downwind_keys = ["Downwind - Deepest Run", "Downwind - Fastest", "Downwind - Avg Speed"]
+    downwind_metrics = {k: v for k, v in metrics.items() if k in downwind_keys}
+    if downwind_metrics:
+        sections.append(("DOWNWIND", downwind_metrics))
     
     # Display with section headers
-    for section, idx in sorted(section_indices.items(), key=lambda x: x[1]):
-        st.markdown(f"**{section}**")
-        section_end = list(section_indices.values())[list(section_indices.values()).index(idx) + 1] if list(section_indices.values()).index(idx) < len(section_indices) - 1 else len(df)
-        st.table(df.iloc[idx:section_end])
+    for section_name, section_metrics in sections:
+        st.markdown(f"**{section_name}**")
+        section_df = pd.DataFrame(list(section_metrics.items()), columns=["Metric", "Value"])
+        st.table(section_df)
 
 
-def create_comparison_table(stretches1, stretches2, gear1_name, gear2_name):
+def create_comparison_table(stretches1, stretches2, gear1_name, gear2_name, gear1_info=None, gear2_info=None):
     """Create a direct comparison table between two gear types."""
     if stretches1.empty or stretches2.empty:
         st.info("Need data for both gear types to perform comparison")
@@ -604,359 +554,418 @@ def create_comparison_table(stretches1, stretches2, gear1_name, gear2_name):
         st.table(downwind_df)
 
 
-def process_gpx_file(uploaded_file, angle_tolerance, min_duration, min_distance, min_speed_ms, active_speed_threshold):
-    """Process a GPX file and return stretches for analysis with estimated wind direction."""
-    try:
-        gpx_result = load_gpx_file(uploaded_file)
+def generate_session_card(session_data):
+    """Generate a card-style display for a session."""
+    with st.container(border=True):
+        # Header with session name and date
+        col1, col2, col3 = st.columns([3, 2, 1])
         
-        # Handle both old and new return formats
-        if isinstance(gpx_result, tuple):
-            gpx_data, metadata = gpx_result
-        else:
-            gpx_data = gpx_result
-            metadata = {'name': None}
-        
-        logger.info(f"Loaded GPX file with {len(gpx_data)} points")
-        
-        # Extract track name from metadata or filename
-        if metadata.get('name'):
-            track_name = metadata['name']
-        elif hasattr(uploaded_file, 'name'):
-            # Use the filename without extension
-            filename = os.path.basename(uploaded_file.name)
-            track_name = os.path.splitext(filename)[0]
-        else:
-            track_name = "Unknown Track"
+        with col1:
+            st.markdown(f"### {session_data['name']}")
+            if session_data.get('date'):
+                try:
+                    date_obj = datetime.fromisoformat(session_data['date'])
+                    st.caption(f"📅 {date_obj.strftime('%B %d, %Y')}")
+                except:
+                    st.caption(f"📅 {session_data['date']}")
+                    
+        with col2:
+            if session_data.get('location'):
+                st.markdown(f"📍 **Location:** {session_data['location']}")
             
-    except Exception as e:
-        logger.error(f"Error loading GPX file: {str(e)}")
-        st.error(f"Error loading GPX file: {str(e)}")
-        return pd.DataFrame(), None, None, None, "Unknown Track"
+            # Wind info
+            wind_info = []
+            if session_data.get('wind_direction') is not None:
+                wind_info.append(f"{session_data['wind_direction']:.0f}°")
+            if session_data.get('wind_speed') and session_data['wind_speed'] > 0:
+                wind_info.append(f"{session_data['wind_speed']} knots")
+            if wind_info:
+                st.markdown(f"💨 **Wind:** {' at '.join(wind_info)}")
+        
+        with col3:
+            st.button("View Details", key=f"view_{session_data['id']}", 
+                      on_click=lambda: st.session_state.update({'selected_session': session_data['id']}))
+        
+        # Gear info
+        cols = st.columns(3)
+        with cols[0]:
+            if session_data.get('board'):
+                st.markdown(f"**Board:** {session_data['board']}")
+        with cols[1]:
+            if session_data.get('foil'):
+                st.markdown(f"**Foil:** {session_data['foil']}")
+        with cols[2]:
+            if session_data.get('wing'):
+                st.markdown(f"**Wing:** {session_data['wing']}")
+        
+        # Show notes if available
+        if session_data.get('notes'):
+            with st.expander("Notes"):
+                st.markdown(session_data['notes'])
+
+
+def show_session_list(session_data_list):
+    """Display a list of saved sessions."""
+    st.subheader("Saved Gear Sessions")
     
-    if gpx_data.empty:
-        return pd.DataFrame(), None, None, None, track_name
+    if not session_data_list:
+        st.info("No gear sessions saved. Go to the Track Analysis page to analyze and export sessions.")
+        return
     
-    # Calculate basic track metrics
-    metrics = calculate_track_metrics(gpx_data, min_speed_knots=active_speed_threshold)
-    
-    # Find consistent angle stretches
-    stretches = find_consistent_angle_stretches(
-        gpx_data, angle_tolerance, min_duration, min_distance
+    # Sort by date if available, otherwise by ID
+    sorted_sessions = sorted(
+        session_data_list, 
+        key=lambda x: (x.get('date', '0') or '0', x['id']), 
+        reverse=True
     )
     
-    if stretches.empty:
-        return pd.DataFrame(), None, None, None, track_name
+    # Display each session as a card
+    for session in sorted_sessions:
+        generate_session_card(session)
+        st.markdown("---")
+
+
+def show_session_detail(session_data):
+    """Show detailed view of a single session."""
+    # Header with back button
+    col1, col2 = st.columns([1, 6])
+    with col1:
+        if st.button("← Back"):
+            st.session_state.selected_session = None
+            st.rerun()
+    with col2:
+        st.header(session_data['name'])
     
-    # Filter by minimum speed
-    stretches = stretches[stretches['speed'] >= min_speed_ms]
-    
-    if stretches.empty:
-        return pd.DataFrame(), None, None, None, track_name
-    
-    # Try to estimate wind direction
-    try:
-        # First with simple method
-        estimated_wind = estimate_wind_direction(stretches, use_simple_method=True)
-        
-        # If that fails, try with complex method
-        if estimated_wind is None:
-            estimated_wind = estimate_wind_direction(stretches, use_simple_method=False)
-        
-        # If still no wind direction, use default
-        if estimated_wind is None:
-            estimated_wind = 90
-            wind_message = "Could not estimate wind direction, using default (90°)"
-        else:
-            wind_message = f"Estimated wind direction: {estimated_wind:.1f}°"
+    # Overview info
+    with st.container(border=True):
+        col1, col2 = st.columns(2)
+        with col1:
+            if session_data.get('date'):
+                try:
+                    date_obj = datetime.fromisoformat(session_data['date'])
+                    st.markdown(f"**📅 Date:** {date_obj.strftime('%B %d, %Y')}")
+                except:
+                    st.markdown(f"**📅 Date:** {session_data['date']}")
             
-    except Exception as e:
-        logger.error(f"Error estimating wind direction: {str(e)}")
-        estimated_wind = 90
-        wind_message = f"Error estimating wind direction: {str(e)}"
+            if session_data.get('location'):
+                st.markdown(f"**📍 Location:** {session_data['location']}")
+            
+            if session_data.get('conditions'):
+                st.markdown(f"**🌊 Conditions:** {session_data['conditions']}")
+        
+        with col2:
+            # Wind info
+            wind_info = []
+            if session_data.get('wind_direction') is not None:
+                wind_info.append(f"{session_data['wind_direction']:.0f}°")
+            if session_data.get('wind_speed') and session_data['wind_speed'] > 0:
+                wind_info.append(f"{session_data['wind_speed']} knots")
+            if session_data.get('wind_range'):
+                wind_info.append(f"Range: {session_data['wind_range']}")
+            if wind_info:
+                st.markdown(f"**💨 Wind:** {' | '.join(wind_info)}")
+            
+            # Gear info
+            gear_info = []
+            if session_data.get('board'):
+                gear_info.append(f"Board: {session_data['board']}")
+            if session_data.get('foil'):
+                gear_info.append(f"Foil: {session_data['foil']}")
+            if session_data.get('wing'):
+                gear_info.append(f"Wing: {session_data['wing']}")
+            if gear_info:
+                st.markdown(f"**🏄 Gear:** {' | '.join(gear_info)}")
     
-    # Calculate angles relative to wind
-    stretches = analyze_wind_angles(stretches, estimated_wind)
+    # Show notes if available
+    if session_data.get('notes'):
+        st.markdown("#### Notes")
+        st.markdown(session_data['notes'])
     
-    return stretches, metrics, estimated_wind, wind_message, track_name
-
-
-def st_main():
-    st.header("Gear Comparison")
-    st.markdown("Compare performance between different gear types")
+    # Performance visualization
+    st.markdown("### Performance Analysis")
     
-    # Initialize session state for gear comparison
-    if 'gear1_data' not in st.session_state:
-        st.session_state.gear1_data = None
+    # Get stretches data
+    stretches = session_data.get('stretches')
+    if stretches is not None and not stretches.empty:
+        if isinstance(stretches, dict):  # Handle JSON serialized DataFrame
+            stretches = pd.DataFrame(stretches)
         
-    if 'gear1_name' not in st.session_state:
-        st.session_state.gear1_name = None
+        # Show polar diagram
+        fig = plot_polar_diagram(stretches, session_data['wind_direction'])
+        st.pyplot(fig)
         
-    if 'gear1_stretches' not in st.session_state:
-        st.session_state.gear1_stretches = None
+        # Create metrics table
+        st.markdown("### Performance Metrics")
         
-    if 'gear1_wind' not in st.session_state:
-        st.session_state.gear1_wind = None
+        # Format gear info for metrics table
+        gear_info = {
+            'board': session_data.get('board'),
+            'foil': session_data.get('foil'),
+            'wing': session_data.get('wing'),
+            'wind_speed': session_data.get('wind_speed'),
+            'wind_range': session_data.get('wind_range'),
+            'conditions': session_data.get('conditions')
+        }
         
-    if 'gear2_data' not in st.session_state:
-        st.session_state.gear2_data = None
-        
-    if 'gear2_name' not in st.session_state:
-        st.session_state.gear2_name = None
-        
-    if 'gear2_stretches' not in st.session_state:
-        st.session_state.gear2_stretches = None
-        
-    if 'gear2_wind' not in st.session_state:
-        st.session_state.gear2_wind = None
-        
-    if 'gear_wind_autodetect' not in st.session_state:
-        st.session_state.gear_wind_autodetect = True
+        create_gear_metrics_table(stretches, gear_info)
+    else:
+        st.warning("No segment data available for this session.")
     
-    # Common settings for both files
-    with st.sidebar:
-        st.header("Gear Comparison Parameters")
-        
-        # Add button to clear gear data
-        if st.session_state.gear1_data is not None or st.session_state.gear2_data is not None:
-            if st.button("Clear All Gear Data"):
-                st.session_state.gear1_data = None
-                st.session_state.gear1_name = None
-                st.session_state.gear1_stretches = None
-                st.session_state.gear1_wind = None
-                st.session_state.gear2_data = None
-                st.session_state.gear2_name = None
-                st.session_state.gear2_stretches = None
-                st.session_state.gear2_wind = None
+    # Delete button
+    if st.button("Delete Session", type="primary", key="delete_session"):
+        st.session_state.confirm_delete = session_data['id']
+    
+    # Confirm delete
+    if getattr(st.session_state, 'confirm_delete', None) == session_data['id']:
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("Cancel", key="cancel_delete"):
+                st.session_state.confirm_delete = None
+        with col2:
+            if st.button("Confirm Delete", key="confirm_delete", type="primary"):
+                # Remove from list
+                st.session_state.gear_comparison_data = [
+                    s for s in st.session_state.gear_comparison_data 
+                    if s['id'] != session_data['id']
+                ]
+                # Reset view
+                st.session_state.selected_session = None
+                st.session_state.confirm_delete = None
+                st.success("Session deleted!")
                 st.rerun()
-        
-        # Wind direction auto-detection
-        st.subheader("Wind Direction")
-        wind_autodetect = st.checkbox(
-            "Auto-detect Wind Direction (recommended)", 
-            value=st.session_state.gear_wind_autodetect,
-            help="Automatically estimate wind direction from track data (recommended for comparison)"
-        )
-        
-        # Update in session state
-        st.session_state.gear_wind_autodetect = wind_autodetect
-        
-        # Show the manual wind input if auto-detect is off
-        if not wind_autodetect:
-            st.warning("Manual wind direction setting not recommended for gear comparison")
-            wind_direction = st.number_input(
-                "Wind Direction (°)", 
-                min_value=0, 
-                max_value=359, 
-                value=90,
-                help="Direction the wind is coming FROM (0-359°)"
-            )
-        
-        # Segment detection parameters
-        st.subheader("Segment Detection")
-        angle_tolerance = st.slider("Angle Tolerance (°)", 
-                                   min_value=5, max_value=20, value=12,
-                                   help="How much the bearing can vary within a segment")
-        
-        # Minimum criteria
-        min_duration = st.slider("Min Duration (sec)", min_value=1, max_value=60, value=10)
-        min_distance = st.slider("Min Distance (m)", min_value=10, max_value=200, value=50)
-        min_speed = st.slider("Min Speed (knots)", min_value=5.0, max_value=30.0, value=10.0, step=0.5)
-        min_speed_ms = min_speed * 0.514444  # Convert knots to m/s
-        
-        st.subheader("Speed Filter")
-        active_speed_threshold = st.slider(
-            "Active Speed Threshold (knots)", 
-            min_value=0.0, max_value=10.0, value=5.0, step=0.5,
-            help="Speeds below this will be excluded from average speed calculation"
-        )
+
+
+def compare_sessions(gear_data_list):
+    """Allow selection and comparison of two sessions."""
+    if len(gear_data_list) < 2:
+        st.warning("Need at least two saved sessions to compare. Go to Track Analysis to save more sessions.")
+        return False
     
-    # Create two columns for file uploads
+    st.subheader("Compare Gear Sessions")
+    
+    # Sort by date if available, otherwise by ID
+    sorted_sessions = sorted(
+        gear_data_list, 
+        key=lambda x: (x.get('date', '0') or '0', x['id']), 
+        reverse=True
+    )
+    
+    # Create selection dropdowns
     col1, col2 = st.columns(2)
     
     with col1:
-        st.subheader("Gear 1")
-        gear1_file = st.file_uploader("Upload GPX for Gear 1", type=["gpx"], key="gear1_uploader")
-        gear1_name_default = "Gear 1"
-        gear1_name_input = st.text_input(
-            "Gear 1 Name (Optional)", 
-            value=st.session_state.gear1_name if st.session_state.gear1_name else "",
-            placeholder="Auto-detected from GPX if available",
-            key="gear1_name_input"
+        gear1_options = {f"{i}: {s['name']}": i for i, s in enumerate(sorted_sessions)}
+        gear1_selection = st.selectbox(
+            "Gear 1 (Reference)", 
+            options=list(gear1_options.keys()),
+            key="gear1_select"
         )
-        
-        # Show clear button for individual gear
-        if st.session_state.gear1_data is not None:
-            if st.button("Clear Gear 1 Data", key="clear_gear1"):
-                st.session_state.gear1_data = None
-                st.session_state.gear1_name = None
-                st.session_state.gear1_stretches = None
-                st.session_state.gear1_wind = None
-                st.rerun()
+        gear1_index = gear1_options[gear1_selection]
+        gear1_data = sorted_sessions[gear1_index]
     
     with col2:
-        st.subheader("Gear 2")
-        gear2_file = st.file_uploader("Upload GPX for Gear 2", type=["gpx"], key="gear2_uploader")
-        gear2_name_default = "Gear 2"
-        gear2_name_input = st.text_input(
-            "Gear 2 Name (Optional)", 
-            value=st.session_state.gear2_name if st.session_state.gear2_name else "",
-            placeholder="Auto-detected from GPX if available",
-            key="gear2_name_input"
+        # Filter out the already selected gear
+        gear2_options = {
+            f"{i}: {s['name']}": i for i, s in enumerate(sorted_sessions) 
+            if i != gear1_index
+        }
+        gear2_selection = st.selectbox(
+            "Gear 2 (Comparison)", 
+            options=list(gear2_options.keys()),
+            key="gear2_select"
+        )
+        gear2_index = gear2_options[gear2_selection]
+        gear2_data = sorted_sessions[gear2_index]
+    
+    # "Compare" button
+    if st.button("Compare Gear", type="primary", key="compare_gear_button"):
+        if st.session_state.get('show_comparison') != [gear1_index, gear2_index]:
+            st.session_state.show_comparison = [gear1_index, gear2_index]
+            st.rerun()
+    
+    # Return whether we should show comparison
+    comparison_ids = getattr(st.session_state, 'show_comparison', None)
+    return comparison_ids == [gear1_index, gear2_index]
+
+
+def run_comparison(gear1_data, gear2_data):
+    """Run detailed comparison between two gear sessions."""
+    st.header(f"Comparison: {gear1_data['name']} vs {gear2_data['name']}")
+    
+    # Get stretches data
+    stretches1 = gear1_data.get('stretches')
+    stretches2 = gear2_data.get('stretches')
+    
+    # Convert from dict to DataFrame if needed (due to JSON serialization)
+    if isinstance(stretches1, dict):
+        stretches1 = pd.DataFrame(stretches1)
+    if isinstance(stretches2, dict):
+        stretches2 = pd.DataFrame(stretches2)
+    
+    if stretches1 is None or stretches2 is None or stretches1.empty or stretches2.empty:
+        st.warning("One or both sessions have no segment data for comparison.")
+        return
+    
+    # Add key headline stats at the top
+    st.write("### Key Performance Highlights")
+    
+    # Calculate headline metrics
+    headline_metrics = calculate_headline_metrics(
+        stretches1, stretches2, gear1_data['name'], gear2_data['name']
+    )
+    
+    # Display headline metrics in 4 columns
+    cols = st.columns(4)
+    
+    with cols[0]:  # Upwind Angle
+        better_upwind = headline_metrics['better_upwind']
+        st.metric(
+            "Better Upwind",
+            f"{better_upwind['name']}",
+            f"{better_upwind['angle']:.1f}° to wind",
+            help="Gear that points closer to the wind (smaller angle is better for upwind)"
+        )
+    
+    with cols[1]:  # Upwind Speed
+        faster_upwind = headline_metrics['faster_upwind']
+        st.metric(
+            "Faster Upwind",
+            f"{faster_upwind['name']}",
+            f"{faster_upwind['speed']:.1f} knots",
+            help="Gear with higher average speed when sailing upwind"
+        )
+    
+    with cols[2]:  # Downwind Angle
+        better_downwind = headline_metrics['better_downwind']
+        st.metric(
+            "Better Downwind",
+            f"{better_downwind['name']}",
+            f"{better_downwind['angle']:.1f}° to wind",
+            help="Gear that sails deeper downwind (larger angle is better for downwind)"
         )
         
-        # Show clear button for individual gear
-        if st.session_state.gear2_data is not None:
-            if st.button("Clear Gear 2 Data", key="clear_gear2"):
-                st.session_state.gear2_data = None
-                st.session_state.gear2_name = None
-                st.session_state.gear2_stretches = None
-                st.session_state.gear2_wind = None
-                st.rerun()
+    with cols[3]:  # Downwind Speed
+        faster_downwind = headline_metrics['faster_downwind']
+        st.metric(
+            "Faster Downwind",
+            f"{faster_downwind['name']}",
+            f"{faster_downwind['speed']:.1f} knots",
+            help="Gear with higher average speed when sailing downwind"
+        )
     
-    # Process files and create comparison
-    # Check if we have new files to process or use existing data from session state
-    process_gear1 = gear1_file is not None
-    process_gear2 = gear2_file is not None
+    # Show gear specs comparison
+    st.write("### Gear Specifications")
     
-    # Use session state data if available
-    if not process_gear1 and st.session_state.gear1_stretches is not None:
-        gear1_stretches = st.session_state.gear1_stretches
-        gear1_wind = st.session_state.gear1_wind
-        gear1_display_name = st.session_state.gear1_name
-        gear1_wind_msg = f"Using saved wind direction: {gear1_wind:.1f}°"
-        gear1_available = True
-    else:
-        gear1_available = process_gear1
+    gear_comparison = {}
+    for field in ['board', 'foil', 'wing', 'wind_speed', 'wind_range', 'conditions', 'location']:
+        gear1_val = gear1_data.get(field, 'N/A')
+        gear2_val = gear2_data.get(field, 'N/A')
         
-    if not process_gear2 and st.session_state.gear2_stretches is not None:
-        gear2_stretches = st.session_state.gear2_stretches
-        gear2_wind = st.session_state.gear2_wind
-        gear2_display_name = st.session_state.gear2_name
-        gear2_wind_msg = f"Using saved wind direction: {gear2_wind:.1f}°"
-        gear2_available = True
-    else:
-        gear2_available = process_gear2
-    
-    # Process new files if needed
-    if process_gear1 or process_gear2:
-        with st.spinner("Processing GPX files..."):
-            if process_gear1:
-                # Process gear 1 file
-                gear1_result = process_gpx_file(
-                    gear1_file, angle_tolerance, min_duration, 
-                    min_distance, min_speed_ms, active_speed_threshold
-                )
-                
-                # Unpack results
-                if len(gear1_result) == 5:
-                    gear1_stretches, gear1_metrics, gear1_wind, gear1_wind_msg, gear1_auto_name = gear1_result
-                    # Use input name or auto-detected name
-                    gear1_display_name = gear1_name_input if gear1_name_input.strip() else gear1_auto_name
-                    # Store in session state
-                    st.session_state.gear1_stretches = gear1_stretches
-                    st.session_state.gear1_wind = gear1_wind
-                    st.session_state.gear1_name = gear1_display_name
-                    st.session_state.gear1_data = True
-                else:
-                    # Handle older return format for backward compatibility
-                    gear1_stretches = gear1_result[0]
-                    gear1_metrics = gear1_result[1] if len(gear1_result) > 1 else None
-                    gear1_wind = gear1_result[2] if len(gear1_result) > 2 else 90
-                    gear1_wind_msg = gear1_result[3] if len(gear1_result) > 3 else "No wind direction detected"
-                    gear1_display_name = gear1_name_input if gear1_name_input.strip() else gear1_name_default
-                    # Store in session state
-                    st.session_state.gear1_stretches = gear1_stretches
-                    st.session_state.gear1_wind = gear1_wind
-                    st.session_state.gear1_name = gear1_display_name
-                    st.session_state.gear1_data = True
+        # Format wind_speed with "knots" if available
+        if field == 'wind_speed' and gear1_val != 'N/A' and gear1_val > 0:
+            gear1_val = f"{gear1_val} knots"
+        if field == 'wind_speed' and gear2_val != 'N/A' and gear2_val > 0:
+            gear2_val = f"{gear2_val} knots"
+        
+        # Skip if both values are N/A
+        if gear1_val == 'N/A' and gear2_val == 'N/A':
+            continue
             
-            if process_gear2:
-                # Process gear 2 file
-                gear2_result = process_gpx_file(
-                    gear2_file, angle_tolerance, min_duration,
-                    min_distance, min_speed_ms, active_speed_threshold
-                )
-                
-                # Unpack results
-                if len(gear2_result) == 5:
-                    gear2_stretches, gear2_metrics, gear2_wind, gear2_wind_msg, gear2_auto_name = gear2_result
-                    # Use input name or auto-detected name
-                    gear2_display_name = gear2_name_input if gear2_name_input.strip() else gear2_auto_name
-                    # Store in session state
-                    st.session_state.gear2_stretches = gear2_stretches
-                    st.session_state.gear2_wind = gear2_wind
-                    st.session_state.gear2_name = gear2_display_name
-                    st.session_state.gear2_data = True
-                else:
-                    # Handle older return format for backward compatibility
-                    gear2_stretches = gear2_result[0]
-                    gear2_metrics = gear2_result[1] if len(gear2_result) > 1 else None
-                    gear2_wind = gear2_result[2] if len(gear2_result) > 2 else 90
-                    gear2_wind_msg = gear2_result[3] if len(gear2_result) > 3 else "No wind direction detected"
-                    gear2_display_name = gear2_name_input if gear2_name_input.strip() else gear2_name_default
-                    # Store in session state
-                    st.session_state.gear2_stretches = gear2_stretches
-                    st.session_state.gear2_wind = gear2_wind
-                    st.session_state.gear2_name = gear2_display_name
-                    st.session_state.gear2_data = True
-            
+        # Add to comparison dict
+        gear_comparison[field.capitalize()] = [gear1_val, gear2_val]
     
-    # If we have both gear data available (either from new files or session state)
-    if (gear1_available and gear2_available) or (process_gear1 and process_gear2):
-        # Display wind direction messages
-        st.info(f"Gear 1 ({gear1_display_name}): {gear1_wind_msg}")
-        st.info(f"Gear 2 ({gear2_display_name}): {gear2_wind_msg}")
-        
-        # If manual wind direction was specified
-        if not wind_autodetect and 'wind_direction' in locals():
-            gear1_wind = wind_direction
-            gear2_wind = wind_direction
-            st.warning(f"Using manual wind direction: {wind_direction}° for both tracks (not recommended)")
-        
-        # Display comparison if both files were processed successfully
-        if not gear1_stretches.empty and not gear2_stretches.empty:
-            create_polar_comparison_section(
-                gear1_stretches, gear2_stretches, 
-                gear1_display_name, gear2_display_name, 
-                gear1_wind, gear2_wind
-            )
+    # Create comparison table if we have specs
+    if gear_comparison:
+        gear_df = pd.DataFrame.from_dict(
+            gear_comparison,
+            orient='index',
+            columns=[gear1_data['name'], gear2_data['name']]
+        )
+        st.table(gear_df)
+    
+    # Plot the comparative polar diagram
+    st.write("### Polar Performance Comparison")
+    fig = create_combined_polars(
+        stretches1, stretches2, 
+        gear1_data['name'], gear2_data['name'], 
+        gear1_data['wind_direction'], gear2_data['wind_direction']
+    )
+    st.pyplot(fig)
+    
+    # Show direct comparisons between the two gear types
+    st.write("### Head-to-Head Comparison")
+    create_comparison_table(
+        stretches1, stretches2, 
+        gear1_data['name'], gear2_data['name'],
+        gear1_data, gear2_data
+    )
+    
+    # Add AI analysis section (placeholder for future implementation)
+    st.write("### AI Performance Analysis")
+    if st.button("Generate AI Analysis", key="generate_ai_analysis"):
+        with st.spinner("Analyzing performance data..."):
+            st.info("AI analysis feature coming soon! This will generate natural language insights about performance differences.")
+
+
+def st_main():
+    """Main gear comparison UI."""
+    st.header("🔄 Gear Comparison")
+    
+    # Initialize key state variables if not already set
+    if 'gear_comparison_data' not in st.session_state:
+        st.session_state.gear_comparison_data = []
+    
+    if 'selected_session' not in st.session_state:
+        st.session_state.selected_session = None
+    
+    # Main page flow control
+    if st.session_state.selected_session is not None:
+        # Detail view for a specific session
+        session = next(
+            (s for s in st.session_state.gear_comparison_data if s['id'] == st.session_state.selected_session), 
+            None
+        )
+        if session:
+            show_session_detail(session)
         else:
-            if gear1_stretches.empty and process_gear1:
-                st.error(f"Could not find any valid segments in {gear1_file.name}")
-            elif gear1_stretches.empty:
-                st.error("No valid segments in Gear 1 data")
-                
-            if gear2_stretches.empty and process_gear2:
-                st.error(f"Could not find any valid segments in {gear2_file.name}")
-            elif gear2_stretches.empty:
-                st.error("No valid segments in Gear 2 data")
-    
-    # Handle cases where we only have one gear or no gears
-    elif gear1_available or process_gear1:
-        st.info("Please upload or select a GPX file for Gear 2 to compare")
-    elif gear2_available or process_gear2:
-        st.info("Please upload or select a GPX file for Gear 1 to compare")
+            st.error("Session not found.")
+            st.session_state.selected_session = None
+            st.rerun()
     else:
-        st.info("Upload GPX files for both gear types to see comparison")
+        # Main gear comparison view
+        st.write("Compare performance between different gear setups.")
         
-        # Show example information
-        st.markdown("### About Gear Comparison")
-        st.markdown("""
-        The gear comparison tool allows you to:
+        # Create tabs for different views
+        tab1, tab2 = st.tabs(["📋 Saved Sessions", "📊 Compare"])
         
-        1. Upload GPX files from two different sessions with different gear
-        2. Automatically detect wind direction from each file (recommended)
-        3. Compare port and starboard performance side-by-side
-        4. See detailed metrics and head-to-head comparisons
-        
-        **Tips for best results:**
-        * Use tracks from similar locations/conditions
-        * Ensure both tracks have sufficient data (upwind and downwind sailing)
-        * Let the system auto-detect wind direction for each track separately
-        * The gear name will be auto-detected from your GPX files when possible
-        """)
+        with tab1:
+            # Show list of all saved sessions
+            show_session_list(st.session_state.gear_comparison_data)
+            
+        with tab2:
+            # Compare two sessions
+            if len(st.session_state.gear_comparison_data) >= 2:
+                # Allow selection of sessions to compare
+                show_comparison = compare_sessions(st.session_state.gear_comparison_data)
+                
+                # If "Compare" button was clicked
+                if show_comparison:
+                    # Get the selected sessions
+                    gear1_idx, gear2_idx = st.session_state.show_comparison
+                    sorted_sessions = sorted(
+                        st.session_state.gear_comparison_data,
+                        key=lambda x: (x.get('date', '0') or '0', x['id']),
+                        reverse=True
+                    )
+                    gear1_data = sorted_sessions[gear1_idx]
+                    gear2_data = sorted_sessions[gear2_idx]
+                    
+                    # Run the comparison
+                    run_comparison(gear1_data, gear2_data)
+            else:
+                st.info("Add at least two sessions from the Track Analysis page to enable comparisons.")
 
 
-# Run the app
+# Run the app if called directly
 if __name__ == "__main__":
     st_main()

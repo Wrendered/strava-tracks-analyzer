@@ -21,7 +21,7 @@ from utils.analysis import find_consistent_angle_stretches, analyze_wind_angles 
 
 # Rename to avoid conflicts
 analyze_wind_angles = analyze_wind_angles_orig
-from utils.visualization import display_track_map, plot_bearing_distribution, plot_polar_diagram
+from utils.visualization import display_track_map, plot_polar_diagram
 
 def main():
     st.set_page_config(
@@ -138,6 +138,103 @@ def main():
 
 def single_track_analysis():
     """Single track analysis page with session state persistence"""
+    
+    # Initialize comparison data storage if not already present
+    if 'gear_comparison_data' not in st.session_state:
+        st.session_state.gear_comparison_data = []
+        
+    # Initialize export form visibility toggle
+    if 'show_export_form' not in st.session_state:
+        st.session_state.show_export_form = False
+    
+    # Show export form dialog if triggered
+    if st.session_state.show_export_form and st.session_state.track_data is not None:
+        with st.form("export_gear_data_form"):
+            st.subheader("Export Session to Gear Comparison")
+            
+            # Get a copy of the current filtered stretches
+            if ('selected_segments' in st.session_state and 
+                isinstance(st.session_state.selected_segments, list) and 
+                len(st.session_state.selected_segments) > 0 and
+                'track_stretches' in st.session_state):
+                
+                current_stretches = st.session_state.track_stretches.loc[
+                    st.session_state.track_stretches.index.isin(st.session_state.selected_segments)
+                ].copy()
+            else:
+                if 'track_stretches' in st.session_state:
+                    current_stretches = st.session_state.track_stretches.copy()
+                else:
+                    current_stretches = pd.DataFrame()
+            
+            # Session name (default to track name)
+            session_name = st.text_input(
+                "Session Name", 
+                value=st.session_state.track_name if st.session_state.track_name else "Unnamed Session"
+            )
+            
+            # Gear info
+            col1, col2 = st.columns(2)
+            with col1:
+                board = st.text_input("Board", placeholder="E.g., Axis S-Series 5'2\"")
+                foil = st.text_input("Foil", placeholder="E.g., Armstrong CF2400")
+            
+            with col2:
+                wing = st.text_input("Wing", placeholder="E.g., Duotone Unit 5m")
+                wind_speed = st.number_input("Avg Wind Speed (knots)", min_value=0, max_value=50, value=0, step=1)
+            
+            # Wind info
+            col1, col2 = st.columns(2)
+            with col1:
+                wind_range = st.text_input("Wind Range", placeholder="E.g., 15-20 knots")
+                conditions = st.text_input("Conditions", placeholder="E.g., Choppy water, gusty")
+            
+            with col2:
+                location = st.text_input("Location", placeholder="E.g., San Francisco Bay")
+                session_date = st.date_input("Session Date", value=None)
+            
+            # Notes
+            notes = st.text_area("Notes", placeholder="Any additional info about this session")
+            
+            # Form submission
+            col1, col2 = st.columns([1, 1])
+            with col1:
+                cancel = st.form_submit_button("Cancel", type="secondary")
+            with col2:
+                submit = st.form_submit_button("Save to Comparison", type="primary")
+            
+            if submit:
+                # Create export data package
+                export_data = {
+                    'id': len(st.session_state.gear_comparison_data) + 1,
+                    'name': session_name,
+                    'date': session_date.isoformat() if session_date else None,
+                    'wind_direction': st.session_state.wind_direction,
+                    'wind_speed': wind_speed,
+                    'wind_range': wind_range,
+                    'board': board,
+                    'foil': foil,
+                    'wing': wing,
+                    'location': location,
+                    'conditions': conditions,
+                    'notes': notes,
+                    'metrics': st.session_state.track_metrics.copy() if st.session_state.track_metrics is not None else None,
+                    'stretches': current_stretches
+                }
+                
+                # Add to comparison data
+                st.session_state.gear_comparison_data.append(export_data)
+                
+                # Close form
+                st.session_state.show_export_form = False
+                st.success(f"✅ '{session_name}' added to gear comparison!")
+                st.rerun()
+                
+            if cancel:
+                # Close form without saving
+                st.session_state.show_export_form = False
+                st.rerun()
+    
     st.header("Track Analysis")
     st.markdown("""
     <div style="margin-bottom: 1rem;">
@@ -435,8 +532,15 @@ def single_track_analysis():
                     st.markdown(f"<span class='card-metric' style='font-size:1.5rem; font-weight:bold; color:var(--primary-color, #0068C9);'>{metrics['avg_speed']:.1f} kn</span>", 
                               unsafe_allow_html=True)
             
-            # No additional footer content needed
-            pass
+            # Export to comparison section
+            export_col1, export_col2 = st.columns([3, 1])
+            with export_col1:
+                st.markdown("**💾 Want to save this session for gear comparison?**")
+            with export_col2:
+                if st.button("🔄 Export to Comparison", key="export_to_comparison", type="primary", use_container_width=True):
+                    # Open a form to enter gear details
+                    st.session_state.show_export_form = True
+                    st.rerun()
         
         # Find consistent angle stretches
         stretches = find_consistent_angle_stretches(
@@ -845,7 +949,6 @@ def single_track_analysis():
                     if len(filtered_stretches) > 2:
                         fig = plot_polar_diagram(filtered_stretches, wind_direction)
                         st.pyplot(fig)
-                        st.caption(f"*Wind at 0°, sailing angles radiate out. Marker size shows distance sailed. {source_note}*")
                     else:
                         st.info("Not enough data for polar plot (need at least 3 segments)")
                     
@@ -867,26 +970,10 @@ def single_track_analysis():
                         filtered_display_df = display_df
                         source_note = f"Showing all {len(display_df)} segments"
                     
-                    # Show bearing distribution plot in the remaining space
-                    bearing_cols = st.columns([2, 1])
-                    with bearing_cols[0]:
-                        # Get filtered stretches for bearing distribution
-                        if ('selected_segments' in st.session_state and 
-                            isinstance(st.session_state.selected_segments, list) and 
-                            len(st.session_state.selected_segments) > 0):
-                            
-                            filtered_stretches = stretches.loc[stretches.index.isin(st.session_state.selected_segments)]
-                        else:
-                            filtered_stretches = stretches
-                            
-                        if len(filtered_stretches) > 0:
-                            fig = plot_bearing_distribution(filtered_stretches, wind_direction)
-                            st.pyplot(fig)
-                        else:
-                            st.warning("No segments selected for bearing distribution plot.")
-                    
-                    with bearing_cols[1]:
-                        st.caption(source_note)
+                    # Download buttons section
+                    st.caption(source_note)
+                    cols = st.columns([1, 1])
+                    with cols[0]:
                         # Compact download buttons
                         csv = filtered_display_df.to_csv(index=False)
                         st.download_button(
@@ -896,7 +983,8 @@ def single_track_analysis():
                             mime="text/csv",
                             use_container_width=True
                         )
-                        
+                    
+                    with cols[1]:
                         # Full data export
                         st.download_button(
                             "📊 Download Complete Analysis",
