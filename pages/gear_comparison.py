@@ -139,9 +139,17 @@ def plot_multi_polar(ax_port, ax_starboard, gear_data_list, colors, max_r):
         ax_starboard.text(np.radians(angle), max_r * 1.07, label, 
                 ha='center', va='center', color=color, fontsize=9)
     
-    # Add titles
-    ax_port.set_title('Port Tack', fontweight='bold', pad=15)
-    ax_starboard.set_title('Starboard Tack', fontweight='bold', pad=15)
+    # Add labels at the bottom instead of titles at the top to avoid overlap
+    # Use figtext to place the labels at the bottom of each subplot
+    fig = ax_port.figure
+    port_pos = ax_port.get_position()
+    starboard_pos = ax_starboard.get_position()
+    
+    # Position the labels at the bottom center of each subplot
+    fig.text(port_pos.x0 + port_pos.width/2, port_pos.y0 - 0.03, 
+             'Port Tack', ha='center', va='center', fontweight='bold')
+    fig.text(starboard_pos.x0 + starboard_pos.width/2, starboard_pos.y0 - 0.03, 
+             'Starboard Tack', ha='center', va='center', fontweight='bold')
 
 
 
