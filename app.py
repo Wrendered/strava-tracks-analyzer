@@ -734,49 +734,6 @@ def single_track_analysis():
                 st.subheader("Track Map")
                 display_track_map(gpx_data, stretches, wind_direction, estimated_wind)
                 
-                # Apply all filters together to get the correct selection
-                all_segments = display_df['original_index'].tolist()
-                filtered_segments = all_segments.copy()
-                
-                # Initialize filter text here
-                filter_text = []
-                
-                # Apply direction filters if active
-                if st.session_state.filter_changes['upwind_selected'] and not st.session_state.filter_changes['downwind_selected']:
-                    upwind_segments = display_df[display_df['upwind_downwind'] == 'Upwind']['original_index'].tolist()
-                    filtered_segments = [s for s in filtered_segments if s in upwind_segments]
-                    filter_text.append("Upwind only")
-                elif st.session_state.filter_changes['downwind_selected'] and not st.session_state.filter_changes['upwind_selected']:
-                    downwind_segments = display_df[display_df['upwind_downwind'] == 'Downwind']['original_index'].tolist()
-                    filtered_segments = [s for s in filtered_segments if s in downwind_segments]
-                    filter_text.append("Downwind only")
-                elif st.session_state.filter_changes['upwind_selected'] and st.session_state.filter_changes['downwind_selected']:
-                    filter_text.append("All directions")
-                
-                # Apply suspicious filter if active
-                if st.session_state.filter_changes['suspicious_removed']:
-                    suspicious_segments = display_df[display_df['suspicious']]['original_index'].tolist()
-                    if suspicious_segments:
-                        filtered_segments = [s for s in filtered_segments if s not in suspicious_segments]
-                    filter_text.append("No suspicious angles")
-                
-                # Apply speed filter if active
-                if st.session_state.filter_changes['best_speed_selected']:
-                    speed_threshold = display_df['speed (knots)'].quantile(0.75)
-                    fast_segments = display_df[display_df['speed (knots)'] >= speed_threshold]['original_index'].tolist()
-                    filtered_segments = [s for s in filtered_segments if s in fast_segments]
-                    filter_text.append(f"Fastest (>{speed_threshold:.1f} knots)")
-                
-                # Update the selected segments to contain the original indices
-                st.session_state.selected_segments = filtered_segments
-                
-                # Display filter status in the left column of the bottom row
-                with bottom_row[0]:
-                    if filter_text:
-                        st.info(f"**Active filters:** {', '.join(filter_text)}")
-                    else:
-                        st.info("**No filters active** - showing all segments")
-                
                 # Apply immediately when button is clicked
                 # Make sure we trigger a complete recalculation
                 if apply_button:
