@@ -881,12 +881,168 @@ def generate_session_card(session_data):
                 st.markdown(session_data['notes'])
 
 
+def process_bulk_upload(uploaded_files):
+    """Process multiple GPX files at once with minimal configuration."""
+    from utils.gpx_parser import load_gpx_file
+    from utils.calculations import calculate_track_metrics
+    from utils.analysis import find_consistent_angle_stretches, analyze_wind_angles, estimate_wind_direction
+    import time
+    
+    # Progress bar
+    progress_bar = st.progress(0, "Processing files...")
+    file_count = len(uploaded_files)
+    
+    # Process each file
+    for i, uploaded_file in enumerate(uploaded_files):
+        progress_text = st.empty()
+        progress_text.markdown(f"Processing file {i+1}/{file_count}: {uploaded_file.name}")
+        progress_bar.progress((i / file_count) * 0.9)  # Use 90% of the progress bar for processing
+        
+        try:
+            # Load GPX data
+            gpx_result = load_gpx_file(uploaded_file)
+            
+            # Handle both old and new return formats
+            if isinstance(gpx_result, tuple):
+                gpx_data, metadata = gpx_result
+                track_name = metadata.get('name', 'Unknown Track')
+            else:
+                gpx_data = gpx_result
+                track_name = os.path.splitext(os.path.basename(uploaded_file.name))[0]
+            
+            if gpx_data.empty:
+                continue
+                
+            # Default parameters (similar to main page)
+            angle_tolerance = 12
+            min_duration = 10
+            min_distance = 50
+            min_speed = 10.0  # knots
+            min_speed_ms = min_speed * 0.514444  # Convert knots to m/s
+            active_speed_threshold = 5.0  # knots
+            
+            # Calculate metrics
+            metrics = calculate_track_metrics(gpx_data, min_speed_knots=active_speed_threshold)
+            
+            # Find segments
+            stretches = find_consistent_angle_stretches(
+                gpx_data, angle_tolerance, min_duration, min_distance
+            )
+            
+            if stretches.empty:
+                continue
+                
+            # Filter by minimum speed
+            stretches = stretches[stretches['speed'] >= min_speed_ms]
+            
+            if stretches.empty:
+                continue
+                
+            # Estimate wind direction
+            try:
+                # Try simple method first
+                estimated_wind = estimate_wind_direction(stretches, use_simple_method=True)
+                
+                # If that fails, try complex method
+                if estimated_wind is None:
+                    estimated_wind = estimate_wind_direction(stretches, use_simple_method=False)
+                
+                # Use default if both fail
+                if estimated_wind is None:
+                    estimated_wind = 90
+            except:
+                estimated_wind = 90
+            
+            # Calculate angles relative to wind
+            stretches = analyze_wind_angles(stretches, estimated_wind)
+            
+            # Create session data
+            session_data = {
+                'id': len(st.session_state.gear_comparison_data) + 1,
+                'name': track_name,
+                'date': None,
+                'wind_direction': estimated_wind,
+                'wind_speed': 0,
+                'wind_range': '',
+                'board': '',
+                'foil': '',
+                'wing': '',
+                'location': '',
+                'conditions': '',
+                'notes': f"Auto-imported from {uploaded_file.name}",
+                'metrics': metrics,
+                'stretches': stretches
+            }
+            
+            # Add to gear comparison data
+            st.session_state.gear_comparison_data.append(session_data)
+            
+        except Exception as e:
+            st.error(f"Error processing {uploaded_file.name}: {str(e)}")
+            continue
+    
+    # Complete progress
+    progress_bar.progress(1.0)
+    time.sleep(0.5)
+    progress_bar.empty()
+    
+    st.success(f"✅ Successfully processed {len(uploaded_files)} files")
+    st.rerun()
+
+
 def show_session_list(session_data_list):
     """Display a list of saved sessions."""
     st.subheader("Saved Gear Sessions")
     
+    # Add bulk upload option
+    with st.expander("⚡ Bulk Upload GPX Files"):
+        st.markdown("""
+        Upload multiple GPX files at once to quickly add sessions for comparison.
+        
+        **How it works:**
+        1. Files will be processed with default settings
+        2. Wind direction will be auto-estimated
+        3. Sessions can be edited later to add details like gear info
+        """)
+        
+        uploaded_files = st.file_uploader(
+            "Select multiple GPX files", 
+            type=['gpx'], 
+            accept_multiple_files=True,
+            key="bulk_gpx_uploader"
+        )
+        
+        if uploaded_files:
+            if st.button("Process Files", key="bulk_process", type="primary"):
+                process_bulk_upload(uploaded_files)
+    
+    # Session management actions
+    if len(session_data_list) > 0:
+        col1, col2 = st.columns([5, 1])
+        with col2:
+            if st.button("🗑️ Clear All", key="clear_all_sessions"):
+                st.session_state.confirm_clear_all = True
+                st.rerun()
+        
+        # Confirm deletion of all sessions
+        if getattr(st.session_state, 'confirm_clear_all', False):
+            st.warning("⚠️ Are you sure you want to delete ALL sessions?")
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("Cancel", key="cancel_clear_all"):
+                    st.session_state.confirm_clear_all = False
+                    st.rerun()
+            with col2:
+                if st.button("Yes, delete all", key="confirm_clear_all", type="primary"):
+                    st.session_state.gear_comparison_data = []
+                    if 'selected_comparison_sessions' in st.session_state:
+                        st.session_state.selected_comparison_sessions = []
+                    st.session_state.confirm_clear_all = False
+                    st.success("All sessions deleted")
+                    st.rerun()
+    
     if not session_data_list:
-        st.info("No gear sessions saved. Go to the Track Analysis page to analyze and export sessions.")
+        st.info("No gear sessions saved. Use bulk upload above or go to the Track Analysis page to analyze and export sessions.")
         return
     
     # Sort by date if available, otherwise by ID
