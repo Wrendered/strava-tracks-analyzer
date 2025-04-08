@@ -353,6 +353,53 @@ def create_gear_metrics_table(stretches, gear_info=None):
     metrics["Overall Max Speed"] = f"{stretches['speed'].max():.1f} knots"
     metrics["Overall Avg Speed"] = f"{stretches['speed'].mean():.1f} knots"
     
+    # Add Pointing Power metric with info icon
+    pointing_power, port_best, starboard_best = calculate_pointing_power(stretches)
+    if pointing_power is not None:
+        if port_best is not None and starboard_best is not None:
+            metrics["Pointing Power ℹ️"] = f"{pointing_power:.1f}° (P: {port_best:.1f}°, S: {starboard_best:.1f}°)"
+        elif port_best is not None:
+            metrics["Pointing Power ℹ️"] = f"{pointing_power:.1f}° (Port tack only)"
+        elif starboard_best is not None:
+            metrics["Pointing Power ℹ️"] = f"{pointing_power:.1f}° (Starboard tack only)"
+    
+    # Calculate clustered upwind speeds
+    clustered_avg_speed, clustered_max_speed, cluster_indices, cluster_info = calculate_clustered_upwind_speed(stretches)
+    
+    # Add explanations
+    if pointing_power is not None or (clustered_avg_speed is not None and clustered_max_speed is not None):
+        with st.expander("About advanced metrics"):
+            if pointing_power is not None:
+                st.markdown("""
+                **Pointing Power** is the average of the best pointing angles achieved on both port and starboard tack.
+                
+                It represents a gear setup's ability to sail close to the wind across both tacks, which is a key
+                performance metric for upwind sailing. Lower numbers are better (closer to the wind).
+                
+                Formula: (Best Port Tack Angle + Best Starboard Tack Angle) / 2
+                """)
+                
+            if clustered_avg_speed is not None:
+                st.markdown("""
+                **Clustered Upwind Speed** is based on a cluster of best pointing tacks, rather than all upwind tacks.
+                
+                The calculation:
+                1. Identifies the best pointing tacks for each side (up to 3 per tack)
+                2. Calculates the average pointing angle from these best tacks
+                3. Includes only tacks that are within 10° of that average
+                4. Calculates speed metrics from this cluster
+                
+                This approach gives a more accurate representation of upwind performance at competitive pointing angles.
+                """)
+                
+                # Add cluster visualization
+                if cluster_indices:
+                    st.markdown("#### Visualization of Upwind Clusters")
+                    st.markdown("Points in the upwind performance cluster are highlighted in solid colors:")
+                    fig = visualize_upwind_clusters(stretches, cluster_indices)
+                    if fig:
+                        st.pyplot(fig)
+    
     # Upwind
     if not upwind.empty:
         best_upwind_speed_idx = upwind['speed'].idxmax()
@@ -363,7 +410,12 @@ def create_gear_metrics_table(stretches, gear_info=None):
         min_angle_idx = upwind['angle_to_wind'].idxmin()
         speed_at_min_angle = upwind.loc[min_angle_idx, 'speed']
         
-        # Formatted metrics
+        # Add clustered upwind speed metrics
+        if clustered_avg_speed is not None and clustered_max_speed is not None:
+            metrics["Upwind - Clustered Avg Speed"] = f"{clustered_avg_speed:.1f} knots"
+            metrics["Upwind - Clustered Max Speed"] = f"{clustered_max_speed:.1f} knots"
+        
+        # Traditional metrics
         metrics["Upwind - Best Pointing"] = f"{min_upwind_angle:.1f}° to wind ({speed_at_min_angle:.1f} knots)"
         metrics["Upwind - Fastest"] = f"{max_upwind_speed:.1f} knots (at {angle_at_max_speed:.1f}° to wind)"
         metrics["Upwind - Avg Speed"] = f"{upwind['speed'].mean():.1f} knots"
@@ -397,7 +449,7 @@ def create_gear_metrics_table(stretches, gear_info=None):
             sections.append(("GEAR INFO", gear_metrics))
     
     # Performance metrics
-    perf_keys = ["Overall Max Speed", "Overall Avg Speed"]
+    perf_keys = ["Overall Max Speed", "Overall Avg Speed", "Pointing Power ℹ️"]
     perf_metrics = {k: v for k, v in metrics.items() if k in perf_keys}
     if perf_metrics:
         sections.append(("OVERALL", perf_metrics))
@@ -418,7 +470,162 @@ def create_gear_metrics_table(stretches, gear_info=None):
     for section_name, section_metrics in sections:
         st.markdown(f"**{section_name}**")
         section_df = pd.DataFrame(list(section_metrics.items()), columns=["Metric", "Value"])
-        st.table(section_df)
+        
+        # Add help tooltip for sections with Pointing Power
+        if "Pointing Power ℹ️" in section_metrics:
+            st.table(section_df, 
+                help="Pointing Power is the average of the best pointing angles on port and starboard tacks. Lower numbers are better (closer to wind)."
+            )
+        else:
+            st.table(section_df)
+
+
+def calculate_pointing_power(stretches):
+    """Calculate pointing power - the average of best port and starboard tack pointing angles."""
+    # Split by tack
+    port_tack = stretches[(stretches['tack'] == 'Port') & (stretches['angle_to_wind'] < 90)]
+    starboard_tack = stretches[(stretches['tack'] == 'Starboard') & (stretches['angle_to_wind'] < 90)]
+    
+    # Get best pointing angles
+    if not port_tack.empty and not starboard_tack.empty:
+        port_best = port_tack['angle_to_wind'].min()
+        starboard_best = starboard_tack['angle_to_wind'].min()
+        # Average the two best
+        pointing_power = (port_best + starboard_best) / 2
+        return pointing_power, port_best, starboard_best
+    elif not port_tack.empty:
+        # Only port tack data available
+        port_best = port_tack['angle_to_wind'].min()
+        return port_best, port_best, None
+    elif not starboard_tack.empty:
+        # Only starboard tack data available
+        starboard_best = starboard_tack['angle_to_wind'].min()
+        return starboard_best, None, starboard_best
+    else:
+        # No upwind data
+        return None, None, None
+
+
+def calculate_clustered_upwind_speed(stretches):
+    """Calculate upwind speed metrics using clustering of best pointing angles.
+    
+    This uses the approach of finding the cluster of best pointing tacks and 
+    calculating speed metrics based on only those tacks, rather than all upwind tacks.
+    
+    Returns:
+        tuple: (avg_speed, max_speed, cluster_indices, cluster_info)
+            - avg_speed: average speed of the clustered segments
+            - max_speed: maximum speed of the clustered segments
+            - cluster_indices: indices of segments in the cluster (for visualization)
+            - cluster_info: dict with port and starboard tack cluster info
+    """
+    # Get upwind stretches
+    upwind = stretches[stretches['angle_to_wind'] < 90]
+    if upwind.empty:
+        return None, None, None, None
+    
+    # Split by tack
+    port_tack = upwind[upwind['tack'] == 'Port']
+    starboard_tack = upwind[upwind['tack'] == 'Starboard']
+    
+    # Functions to process each tack
+    def process_tack(tack_data):
+        if tack_data.empty:
+            return pd.DataFrame(), 0, []
+        
+        # Sort by angle to wind (ascending, best pointing first)
+        sorted_tack = tack_data.sort_values('angle_to_wind')
+        
+        # Get up to 3 best pointing segments
+        best_pointing = sorted_tack.head(min(3, len(sorted_tack)))
+        
+        # Calculate average of best pointing angles
+        avg_angle = best_pointing['angle_to_wind'].mean()
+        
+        # Get all segments within 10 degrees of that average
+        cluster_segments = tack_data[tack_data['angle_to_wind'] <= avg_angle + 10]
+        
+        # Get indices for visualization
+        cluster_indices = cluster_segments.index.tolist()
+        
+        return cluster_segments, avg_angle, cluster_indices
+    
+    # Process each tack
+    port_cluster, port_avg_angle, port_indices = process_tack(port_tack)
+    starboard_cluster, starboard_avg_angle, starboard_indices = process_tack(starboard_tack)
+    
+    # Combine clusters
+    combined_cluster = pd.concat([port_cluster, starboard_cluster])
+    all_indices = port_indices + starboard_indices
+    
+    if combined_cluster.empty:
+        return None, None, None, None
+    
+    # Calculate metrics
+    avg_speed = combined_cluster['speed'].mean()
+    max_speed = combined_cluster['speed'].max()
+    
+    # Create cluster info dict
+    cluster_info = {
+        'port': {
+            'avg_angle': port_avg_angle if not port_cluster.empty else None,
+            'count': len(port_cluster),
+            'avg_speed': port_cluster['speed'].mean() if not port_cluster.empty else None
+        },
+        'starboard': {
+            'avg_angle': starboard_avg_angle if not starboard_cluster.empty else None,
+            'count': len(starboard_cluster),
+            'avg_speed': starboard_cluster['speed'].mean() if not starboard_cluster.empty else None
+        }
+    }
+    
+    return avg_speed, max_speed, all_indices, cluster_info
+
+
+def visualize_upwind_clusters(stretches, cluster_indices=None):
+    """Create a scatter plot showing upwind performance with clusters highlighted."""
+    if stretches.empty:
+        return None
+        
+    # Filter for upwind data
+    upwind = stretches[stretches['angle_to_wind'] < 90]
+    if upwind.empty:
+        return None
+        
+    # Create figure
+    fig, ax = plt.subplots(figsize=(10, 6))
+    
+    # Plot all upwind points
+    port = upwind[upwind['tack'] == 'Port']
+    starboard = upwind[upwind['tack'] == 'Starboard']
+    
+    ax.scatter(port['angle_to_wind'], port['speed'], 
+              color='lightcoral', alpha=0.5, label='Port Tack')
+    ax.scatter(starboard['angle_to_wind'], starboard['speed'], 
+              color='lightblue', alpha=0.5, label='Starboard Tack')
+    
+    # Highlight clustered points if provided
+    if cluster_indices:
+        cluster = stretches.loc[cluster_indices]
+        port_cluster = cluster[cluster['tack'] == 'Port']
+        starboard_cluster = cluster[cluster['tack'] == 'Starboard']
+        
+        ax.scatter(port_cluster['angle_to_wind'], port_cluster['speed'], 
+                  color='red', alpha=1.0, s=100, label='Port Cluster')
+        ax.scatter(starboard_cluster['angle_to_wind'], starboard_cluster['speed'], 
+                  color='blue', alpha=1.0, s=100, label='Starboard Cluster')
+    
+    # Add labels and styling
+    ax.set_xlabel('Angle to Wind (degrees)')
+    ax.set_ylabel('Speed (knots)')
+    ax.set_title('Upwind Performance with High-Pointing Clusters')
+    ax.grid(True, alpha=0.3)
+    ax.legend()
+    
+    # Adjust axes
+    ax.set_xlim(0, 90)
+    
+    return fig
 
 
 def create_comparison_table(stretches1, stretches2, gear1_name, gear2_name, gear1_info=None, gear2_info=None):
@@ -469,6 +676,28 @@ def create_comparison_table(stretches1, stretches2, gear1_name, gear2_name, gear
         st.markdown("**Upwind Performance**")
         upwind_comparison = {}
         
+        # Calculate pointing power for each gear
+        pointing_power1, port_best1, starboard_best1 = calculate_pointing_power(stretches1)
+        pointing_power2, port_best2, starboard_best2 = calculate_pointing_power(stretches2)
+        
+        if pointing_power1 is not None and pointing_power2 is not None:
+            pointing_diff = pointing_power1 - pointing_power2
+            upwind_comparison["Pointing Power"] = [
+                f"{pointing_power1:.1f}°", 
+                f"{pointing_power2:.1f}°",
+                f"{abs(pointing_diff):.1f}° {gear2_name if pointing_diff > 0 else gear1_name}"
+            ]
+            
+            # Replace expander with help tooltip
+            upwind_comparison["Pointing Power ℹ️"] = [
+                f"{pointing_power1:.1f}°", 
+                f"{pointing_power2:.1f}°",
+                f"{abs(pointing_diff):.1f}° {gear2_name if pointing_diff > 0 else gear1_name}"
+            ]
+            
+            # Remove the previous entry without the help icon
+            upwind_comparison.pop("Pointing Power")
+        
         # Best pointing angle
         min_angle1 = upwind1['angle_to_wind'].min()
         min_angle2 = upwind2['angle_to_wind'].min()
@@ -479,21 +708,76 @@ def create_comparison_table(stretches1, stretches2, gear1_name, gear2_name, gear
             f"{abs(angle_diff):.1f}° {gear2_name if angle_diff > 0 else gear1_name}"
         ]
         
-        # Average upwind speed
+        # Calculate clustered upwind speeds
+        clustered_avg_speed1, clustered_max_speed1, cluster_indices1, cluster_info1 = calculate_clustered_upwind_speed(stretches1)
+        clustered_avg_speed2, clustered_max_speed2, cluster_indices2, cluster_info2 = calculate_clustered_upwind_speed(stretches2)
+        
+        # Explaining the clustered speed calculation
+        with st.expander("About Upwind Speed Calculation"):
+            st.markdown("""
+            **Upwind Speed Calculation** is based on a cluster of best pointing tacks, rather than all upwind tacks.
+            
+            The calculation:
+            1. Identifies the best pointing tacks for each side (up to 3 per tack)
+            2. Calculates the average pointing angle from these best tacks
+            3. Includes only tacks that are within 10° of that average
+            4. Calculates speed metrics from this cluster
+            
+            This approach gives a more accurate representation of upwind performance at competitive pointing angles.
+            """)
+            
+            # Add cluster visualizations
+            if cluster_indices1 or cluster_indices2:
+                cols = st.columns(2)
+                
+                with cols[0]:
+                    if cluster_indices1:
+                        st.markdown(f"**{gear1_name} Upwind Cluster**")
+                        fig1 = visualize_upwind_clusters(stretches1, cluster_indices1)
+                        if fig1:
+                            st.pyplot(fig1)
+                
+                with cols[1]:
+                    if cluster_indices2:
+                        st.markdown(f"**{gear2_name} Upwind Cluster**")
+                        fig2 = visualize_upwind_clusters(stretches2, cluster_indices2)
+                        if fig2:
+                            st.pyplot(fig2)
+        
+        # Average upwind speed (clustered approach)
+        if clustered_avg_speed1 is not None and clustered_avg_speed2 is not None:
+            upwind_avg_diff = clustered_avg_speed1 - clustered_avg_speed2
+            upwind_comparison["Clustered Upwind Avg Speed"] = [
+                f"{clustered_avg_speed1:.1f} knots", 
+                f"{clustered_avg_speed2:.1f} knots",
+                f"{abs(upwind_avg_diff):.1f} knots {gear1_name if upwind_avg_diff > 0 else gear2_name}"
+            ]
+        
+        # Maximum upwind speed (clustered approach)
+        if clustered_max_speed1 is not None and clustered_max_speed2 is not None:
+            upwind_max_diff = clustered_max_speed1 - clustered_max_speed2
+            upwind_comparison["Clustered Upwind Max Speed"] = [
+                f"{clustered_max_speed1:.1f} knots", 
+                f"{clustered_max_speed2:.1f} knots",
+                f"{abs(upwind_max_diff):.1f} knots {gear1_name if upwind_max_diff > 0 else gear2_name}"
+            ]
+        
+        # Traditional metrics as fallback
+        # Average upwind speed (all upwind tacks)
         avg_upwind_speed1 = upwind1['speed'].mean()
         avg_upwind_speed2 = upwind2['speed'].mean()
         upwind_avg_diff = avg_upwind_speed1 - avg_upwind_speed2
-        upwind_comparison["Average Upwind Speed"] = [
+        upwind_comparison["All Upwind Avg Speed"] = [
             f"{avg_upwind_speed1:.1f} knots", 
             f"{avg_upwind_speed2:.1f} knots",
             f"{abs(upwind_avg_diff):.1f} knots {gear1_name if upwind_avg_diff > 0 else gear2_name}"
         ]
         
-        # Maximum upwind speed
+        # Maximum upwind speed (all upwind tacks)
         max_upwind_speed1 = upwind1['speed'].max()
         max_upwind_speed2 = upwind2['speed'].max()
         upwind_max_diff = max_upwind_speed1 - max_upwind_speed2
-        upwind_comparison["Maximum Upwind Speed"] = [
+        upwind_comparison["All Upwind Max Speed"] = [
             f"{max_upwind_speed1:.1f} knots", 
             f"{max_upwind_speed2:.1f} knots",
             f"{abs(upwind_max_diff):.1f} knots {gear1_name if upwind_max_diff > 0 else gear2_name}"
@@ -505,7 +789,11 @@ def create_comparison_table(stretches1, stretches2, gear1_name, gear2_name, gear
             orient='index',
             columns=[gear1_name, gear2_name, "Difference (Better Gear)"]
         )
-        st.table(upwind_df)
+        
+        # Display with help tooltip for Pointing Power
+        st.table(upwind_df, 
+            help="Pointing Power is the average of the best pointing angles on port and starboard tacks. Lower numbers are better (closer to wind)."
+        )
     
     # Downwind comparison
     downwind1 = stretches1[stretches1['angle_to_wind'] >= 90]
