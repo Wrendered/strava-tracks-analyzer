@@ -231,7 +231,7 @@ def plot_polar_diagram(stretches, wind_direction):
         
         # Set up the polar plot - 0 degrees at top (upwind)
         ax_port.set_theta_zero_location('N')  # 0 degrees at the top
-        ax_port.set_theta_direction(-1)  # clockwise
+        ax_port.set_theta_direction(1)  # counter-clockwise (mirror flip)
         
         # Set the theta limits to 0-180 degrees (only show the top half)
         ax_port.set_thetamin(0)
@@ -344,9 +344,9 @@ def plot_polar_diagram(stretches, wind_direction):
                "Marker size indicates distance sailed at this angle/speed combination.",
                ha='center', fontsize=9, wrap=True)
     
-    # Adjust layout - increase bottom margin to give text more room
+    # Adjust layout - increase bottom margin to give text more room and bring plots closer
     plt.tight_layout()
-    plt.subplots_adjust(bottom=0.17, right=0.85)
+    plt.subplots_adjust(bottom=0.17, right=0.85, wspace=-0.45)
     
     return fig
 

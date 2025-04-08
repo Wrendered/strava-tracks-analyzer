@@ -516,10 +516,6 @@ def single_track_analysis():
                 # Reorganize the layout with tabs for better organization 
                 st.write("## 🌊 Track Analysis Dashboard 🪂")
                 
-                # Display the map at the top - it's the most important visualization
-                st.subheader("Track Map")
-                display_track_map(gpx_data, stretches, wind_direction, estimated_wind)
-                
                 # Create DataFrame for segment display
                 if 'segment_data' not in st.session_state:
                     st.session_state.segment_data = stretches.copy()
@@ -545,6 +541,19 @@ def single_track_analysis():
                     not isinstance(st.session_state.selected_segments, list)):
                     # Default to all segments selected - use original indices
                     st.session_state.selected_segments = display_df['original_index'].tolist()
+                    
+                    # Set default filter state with suspicious segments excluded
+                    st.session_state.filter_changes = {
+                        'upwind_selected': False,
+                        'downwind_selected': False,
+                        'suspicious_removed': True,  # Default to true
+                        'best_speed_selected': False
+                    }
+                    
+                    # Default to excluding suspicious segments
+                    suspicious_segments = display_df[display_df['suspicious']]['original_index'].tolist()
+                    if suspicious_segments:
+                        st.session_state.selected_segments = [s for s in st.session_state.selected_segments if s not in suspicious_segments]
                 
                 # Rename columns to be clearer
                 display_df = display_df.rename(columns={
@@ -562,107 +571,111 @@ def single_track_analysis():
                 display_df['distance (m)'] = display_df['distance (m)'].round(1)
                 display_df['speed (knots)'] = display_df['speed (knots)'].round(2)
                 
-                # Reorganize for a more compact, dense layout with 2 columns
-                col1, col2 = st.columns([1, 1])
+                # SEGMENT SELECTION BAR - Placed before the map
+                st.markdown("### 🔍 Segment Selection")
                 
-                # LEFT COLUMN - Controls and Best Performance 
-                with col1:
-                    # SEGMENT SELECTION CONTROLS
-                    st.subheader("💨 Segment Selection")
-                    
-                    # Set default filter state
-                    if 'filter_changes' not in st.session_state:
-                        st.session_state.filter_changes = {
-                            'upwind_selected': False,
-                            'downwind_selected': False,
-                            'suspicious_removed': False,
-                            'best_speed_selected': False
-                        }
-                    
-                    # Create a compact filter section
-                    with st.container(border=True):
-                        # Create two rows of buttons for better organization
-                        row1_cols = st.columns([1, 1])
-                        with row1_cols[0]:
-                            if st.button("🔄 All", key="all_btn", help="Select all segments", use_container_width=True):
-                                st.session_state.filter_changes = {'upwind_selected': False, 'downwind_selected': False, 
-                                                              'suspicious_removed': False, 'best_speed_selected': False}
-                                st.session_state.selected_segments = display_df['original_index'].tolist()
-                                st.rerun()
-                        with row1_cols[1]:
-                            if st.button("❌ None", key="none_btn", help="Deselect all segments", use_container_width=True):
-                                st.session_state.filter_changes = {'upwind_selected': False, 'downwind_selected': False, 
-                                                              'suspicious_removed': False, 'best_speed_selected': False}
-                                st.session_state.selected_segments = []
-                                st.rerun()
-                                
-                        # Direction and Quality Filters in two columns for density
-                        filt_cols = st.columns(2)
-                        with filt_cols[0]:
-                            st.write("**Direction:**")
-                            upwind = st.checkbox("⬆️ Upwind", value=st.session_state.filter_changes['upwind_selected'], key="upwind_check")
-                            st.session_state.filter_changes['upwind_selected'] = upwind
-                            
-                            downwind = st.checkbox("⬇️ Downwind", value=st.session_state.filter_changes['downwind_selected'], key="downwind_check")
-                            st.session_state.filter_changes['downwind_selected'] = downwind
-                        
-                        with filt_cols[1]:
-                            st.write("**Quality:**")
-                            no_suspicious = st.checkbox("⚠️ No Suspicious", value=st.session_state.filter_changes['suspicious_removed'], key="suspicious_check")
-                            st.session_state.filter_changes['suspicious_removed'] = no_suspicious
-                            
-                            fastest = st.checkbox("⚡ Fastest Only", value=st.session_state.filter_changes['best_speed_selected'], key="speed_check")
-                            st.session_state.filter_changes['best_speed_selected'] = fastest
-                        
-                        # Add Apply button - make it more prominent
-                        apply_button = st.button("✅ Apply Filters & Recalculate", type="primary", key="apply_filters", use_container_width=True, help="Apply filters and recalculate all metrics with current wind direction")
-                    
-                    # Process filters and update selection
-                    # Initialize filter indicators
-                    filter_text = []
-                    
-                    # Apply all filters together to get the correct selection
-                    all_segments = display_df['original_index'].tolist()
-                    filtered_segments = all_segments.copy()
-                    
-                    # Apply direction filters if active
-                    if st.session_state.filter_changes['upwind_selected'] and not st.session_state.filter_changes['downwind_selected']:
-                        upwind_segments = display_df[display_df['upwind_downwind'] == 'Upwind']['original_index'].tolist()
-                        filtered_segments = [s for s in filtered_segments if s in upwind_segments]
-                        filter_text.append("Upwind only")
-                    elif st.session_state.filter_changes['downwind_selected'] and not st.session_state.filter_changes['upwind_selected']:
-                        downwind_segments = display_df[display_df['upwind_downwind'] == 'Downwind']['original_index'].tolist()
-                        filtered_segments = [s for s in filtered_segments if s in downwind_segments]
-                        filter_text.append("Downwind only")
-                    elif st.session_state.filter_changes['upwind_selected'] and st.session_state.filter_changes['downwind_selected']:
-                        filter_text.append("All directions")
-                    
-                    # Apply suspicious filter if active
-                    if st.session_state.filter_changes['suspicious_removed']:
-                        suspicious_segments = display_df[display_df['suspicious']]['original_index'].tolist()
-                        if suspicious_segments:
-                            filtered_segments = [s for s in filtered_segments if s not in suspicious_segments]
-                        filter_text.append("No suspicious angles")
-                    
-                    # Apply speed filter if active
-                    if st.session_state.filter_changes['best_speed_selected']:
-                        speed_threshold = display_df['speed (knots)'].quantile(0.75)
-                        fast_segments = display_df[display_df['speed (knots)'] >= speed_threshold]['original_index'].tolist()
-                        filtered_segments = [s for s in filtered_segments if s in fast_segments]
-                        filter_text.append(f"Fastest (>{speed_threshold:.1f} knots)")
-                    
-                    # Update the selected segments to contain the original indices
-                    st.session_state.selected_segments = filtered_segments
-                    
-                    # Display filter status
+                # Set default filter state if not already set
+                if 'filter_changes' not in st.session_state:
+                    st.session_state.filter_changes = {
+                        'upwind_selected': False,
+                        'downwind_selected': False,
+                        'suspicious_removed': True,  # Default to true
+                        'best_speed_selected': False
+                    }
+                
+                # Create a horizontal segment selection bar with filter status and wind re-estimation
+                filter_container = st.container(border=True)
+                
+                top_row = filter_container.columns([1, 1, 2, 2, 1])
+                # Left buttons
+                with top_row[0]:
+                    if st.button("🔄 All", key="all_btn", help="Select all segments", use_container_width=True):
+                        st.session_state.filter_changes = {'upwind_selected': False, 'downwind_selected': False, 
+                                                      'suspicious_removed': False, 'best_speed_selected': False}
+                        st.session_state.selected_segments = display_df['original_index'].tolist()
+                        st.rerun()
+                with top_row[1]:
+                    if st.button("❌ None", key="none_btn", help="Deselect all segments", use_container_width=True):
+                        st.session_state.filter_changes = {'upwind_selected': False, 'downwind_selected': False, 
+                                                      'suspicious_removed': False, 'best_speed_selected': False}
+                        st.session_state.selected_segments = []
+                        st.rerun()
+                
+                # Direction filter controls
+                with top_row[2]:
+                    st.write("**Direction:**")
+                    dir_cols = st.columns(2)
+                    with dir_cols[0]:
+                        upwind = st.checkbox("⬆️ Upwind", value=st.session_state.filter_changes['upwind_selected'], key="upwind_check")
+                        st.session_state.filter_changes['upwind_selected'] = upwind
+                    with dir_cols[1]:
+                        downwind = st.checkbox("⬇️ Downwind", value=st.session_state.filter_changes['downwind_selected'], key="downwind_check")
+                        st.session_state.filter_changes['downwind_selected'] = downwind
+                
+                # Quality filter controls
+                with top_row[3]:
+                    st.write("**Quality:**")
+                    qual_cols = st.columns(2)
+                    with qual_cols[0]:
+                        no_suspicious = st.checkbox("⚠️ No Suspicious", value=st.session_state.filter_changes['suspicious_removed'], key="suspicious_check")
+                        st.session_state.filter_changes['suspicious_removed'] = no_suspicious
+                    with qual_cols[1]:
+                        fastest = st.checkbox("⚡ Fastest Only", value=st.session_state.filter_changes['best_speed_selected'], key="speed_check")
+                        st.session_state.filter_changes['best_speed_selected'] = fastest
+                
+                # Apply button
+                with top_row[4]:
+                    st.write("&nbsp;")  # Add some spacing
+                    apply_button = st.button("✅ Apply", type="primary", key="apply_filters", use_container_width=True, help="Apply filters & recalculate metrics")
+                
+                # Second row for status and wind estimation
+                bottom_row = filter_container.columns([2, 1])
+                
+                # Apply all filters together to get the correct selection
+                all_segments = display_df['original_index'].tolist()
+                filtered_segments = all_segments.copy()
+                
+                # Initialize filter text in this scope only
+                filter_text = []
+                
+                # Apply direction filters if active
+                if st.session_state.filter_changes['upwind_selected'] and not st.session_state.filter_changes['downwind_selected']:
+                    upwind_segments = display_df[display_df['upwind_downwind'] == 'Upwind']['original_index'].tolist()
+                    filtered_segments = [s for s in filtered_segments if s in upwind_segments]
+                    filter_text.append("Upwind only")
+                elif st.session_state.filter_changes['downwind_selected'] and not st.session_state.filter_changes['upwind_selected']:
+                    downwind_segments = display_df[display_df['upwind_downwind'] == 'Downwind']['original_index'].tolist()
+                    filtered_segments = [s for s in filtered_segments if s in downwind_segments]
+                    filter_text.append("Downwind only")
+                elif st.session_state.filter_changes['upwind_selected'] and st.session_state.filter_changes['downwind_selected']:
+                    filter_text.append("All directions")
+                
+                # Apply suspicious filter if active
+                if st.session_state.filter_changes['suspicious_removed']:
+                    suspicious_segments = display_df[display_df['suspicious']]['original_index'].tolist()
+                    if suspicious_segments:
+                        filtered_segments = [s for s in filtered_segments if s not in suspicious_segments]
+                    filter_text.append("No suspicious angles")
+                
+                # Apply speed filter if active
+                if st.session_state.filter_changes['best_speed_selected']:
+                    speed_threshold = display_df['speed (knots)'].quantile(0.75)
+                    fast_segments = display_df[display_df['speed (knots)'] >= speed_threshold]['original_index'].tolist()
+                    filtered_segments = [s for s in filtered_segments if s in fast_segments]
+                    filter_text.append(f"Fastest (>{speed_threshold:.1f} knots)")
+                
+                # Update the selected segments
+                st.session_state.selected_segments = filtered_segments
+                
+                # Display filter status in the first column of the bottom row
+                with bottom_row[0]:
                     if filter_text:
-                        st.success(f"**Active filters:** {', '.join(filter_text)}")
+                        st.info(f"**Active filters:** {', '.join(filter_text)}")
                     else:
                         st.info("**No filters active** - showing all segments")
-                        
-                    # Add a button to re-estimate wind direction based on selected segments only
-                    st.write("**Wind Direction Estimation:**")
-                    
+                
+                # Add wind estimation button in the second column
+                with bottom_row[1]:
                     # Get the filtered segments for estimation
                     if filtered_segments and len(filtered_segments) > 0:
                         estimation_stretches = stretches.loc[stretches.index.isin(filtered_segments)]
@@ -670,12 +683,9 @@ def single_track_analysis():
                     else:
                         estimation_stretches = stretches
                         segment_count = len(stretches)
-                        
-                    if st.button("🧭 Re-estimate Wind Direction", 
-                              help="Recalculate wind direction based on ONLY currently selected segments", 
-                              key="reestimate_wind",
-                              use_container_width=True):
-                        
+                    
+                    # Add wind re-estimation button
+                    if st.button("🧭 Re-estimate Wind", help="Recalculate wind direction based on current segments", key="reestimate_wind", use_container_width=True):
                         if segment_count >= 3:  # Need at least 3 segments for reliable estimation
                             # Import here to avoid scope issues
                             from utils.analysis import estimate_wind_direction, estimate_wind_direction_from_upwind_tacks
@@ -705,7 +715,7 @@ def single_track_analysis():
                             if new_wind_estimate is not None:
                                 st.session_state.estimated_wind = new_wind_estimate
                                 st.session_state.wind_direction = new_wind_estimate
-                                st.success(f"✅ Wind direction re-estimated: {new_wind_estimate:.1f}° based on your {segment_count} selected segments (using {method_used})")
+                                st.success(f"✅ Wind direction re-estimated: {new_wind_estimate:.1f}° based on your {segment_count} selected segments")
                                 
                                 # Also recalculate angles with new wind direction
                                 # Use the global analyze_wind_angles function
@@ -719,24 +729,76 @@ def single_track_analysis():
                                 st.error("⚠️ Couldn't estimate wind direction from selected segments")
                         else:
                             st.warning(f"⚠️ Need at least 3 segments to estimate wind direction. You have {segment_count} selected.")
+                
+                # Display the map after segment selection
+                st.subheader("Track Map")
+                display_track_map(gpx_data, stretches, wind_direction, estimated_wind)
+                
+                # Apply all filters together to get the correct selection
+                all_segments = display_df['original_index'].tolist()
+                filtered_segments = all_segments.copy()
+                
+                # Initialize filter text here
+                filter_text = []
+                
+                # Apply direction filters if active
+                if st.session_state.filter_changes['upwind_selected'] and not st.session_state.filter_changes['downwind_selected']:
+                    upwind_segments = display_df[display_df['upwind_downwind'] == 'Upwind']['original_index'].tolist()
+                    filtered_segments = [s for s in filtered_segments if s in upwind_segments]
+                    filter_text.append("Upwind only")
+                elif st.session_state.filter_changes['downwind_selected'] and not st.session_state.filter_changes['upwind_selected']:
+                    downwind_segments = display_df[display_df['upwind_downwind'] == 'Downwind']['original_index'].tolist()
+                    filtered_segments = [s for s in filtered_segments if s in downwind_segments]
+                    filter_text.append("Downwind only")
+                elif st.session_state.filter_changes['upwind_selected'] and st.session_state.filter_changes['downwind_selected']:
+                    filter_text.append("All directions")
+                
+                # Apply suspicious filter if active
+                if st.session_state.filter_changes['suspicious_removed']:
+                    suspicious_segments = display_df[display_df['suspicious']]['original_index'].tolist()
+                    if suspicious_segments:
+                        filtered_segments = [s for s in filtered_segments if s not in suspicious_segments]
+                    filter_text.append("No suspicious angles")
+                
+                # Apply speed filter if active
+                if st.session_state.filter_changes['best_speed_selected']:
+                    speed_threshold = display_df['speed (knots)'].quantile(0.75)
+                    fast_segments = display_df[display_df['speed (knots)'] >= speed_threshold]['original_index'].tolist()
+                    filtered_segments = [s for s in filtered_segments if s in fast_segments]
+                    filter_text.append(f"Fastest (>{speed_threshold:.1f} knots)")
+                
+                # Update the selected segments to contain the original indices
+                st.session_state.selected_segments = filtered_segments
+                
+                # Display filter status in the left column of the bottom row
+                with bottom_row[0]:
+                    if filter_text:
+                        st.info(f"**Active filters:** {', '.join(filter_text)}")
+                    else:
+                        st.info("**No filters active** - showing all segments")
+                
+                # Apply immediately when button is clicked
+                # Make sure we trigger a complete recalculation
+                if apply_button:
+                    # Force recalculation with current wind direction before rerun
+                    # This is the key fix to ensure filters and wind direction changes affect all visualizations
+                    if st.session_state.track_stretches is not None:
+                        # Get the base stretches before wind angle calculation
+                        base_stretches = st.session_state.track_stretches.copy()
+                        # Use the global analyze_wind_angles function
+                        # Recalculate wind angles with current wind direction
+                        recalculated_stretches = analyze_wind_angles(base_stretches, wind_direction)
+                        # Update session state with fresh calculation
+                        st.session_state.track_stretches = recalculated_stretches
                     
-                    # Apply immediately when button is clicked
-                    # Make sure we trigger a complete recalculation
-                    if apply_button:
-                        # Force recalculation with current wind direction before rerun
-                        # This is the key fix to ensure filters and wind direction changes affect all visualizations
-                        if st.session_state.track_stretches is not None:
-                            # Get the base stretches before wind angle calculation
-                            base_stretches = st.session_state.track_stretches.copy()
-                            # Use the global analyze_wind_angles function
-                            # Recalculate wind angles with current wind direction
-                            recalculated_stretches = analyze_wind_angles(base_stretches, wind_direction)
-                            # Update session state with fresh calculation
-                            st.session_state.track_stretches = recalculated_stretches
-                        
-                        # Now trigger a full page rerun with the updated data
-                        st.rerun()
-                    
+                    # Now trigger a full page rerun with the updated data
+                    st.rerun()
+                
+                # Reorganize for a more compact, dense layout with 2 columns for main content
+                col1, col2 = st.columns([1, 1])
+                
+                # LEFT COLUMN - Performance Analysis 
+                with col1:
                     # PERFORMANCE ANALYSIS - Best Angles Section
                     st.subheader("📊 Performance Analysis")
                     
