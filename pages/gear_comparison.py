@@ -21,146 +21,129 @@ logger = logging.getLogger(__name__)
 from utils.visualization import plot_polar_diagram
 
 
-def create_combined_polars(gear1_stretches, gear2_stretches, gear1_name, gear2_name, wind_direction1, wind_direction2):
-    """Create port/starboard polar half-circles with both gear on each plot for direct comparison."""
+def create_combined_polars(gear_data_list):
+    """Create port/starboard polar half-circles with multiple gear plotted for comparison.
+    
+    Args:
+        gear_data_list: List of dictionaries with keys 'stretches', 'name', 'wind_direction'
+    """
     fig, (ax_port, ax_starboard) = plt.subplots(1, 2, figsize=(14, 7), subplot_kw={'projection': 'polar'})
     
-    plt.suptitle(f"Gear Comparison: {gear1_name} vs {gear2_name}", fontsize=16)
+    # Create title showing all compared gear
+    gear_names = [gear['name'] for gear in gear_data_list]
+    if len(gear_names) == 2:
+        title = f"Gear Comparison: {gear_names[0]} vs {gear_names[1]}"
+    else:
+        title = f"Gear Comparison: {', '.join(gear_names[:-1])} and {gear_names[-1]}"
+    plt.suptitle(title, fontsize=16)
     
-    # Define colors for each gear
-    gear1_color = 'red'
-    gear2_color = 'blue'
+    # Define colors for different gear - create a color cycle for many items
+    colors = plt.cm.tab10.colors  # Use the tab10 colormap for up to 10 different gear
     
     # Get maximum speeds to make scales consistent
     max_speeds = []
     
-    # Calculate max speeds from both gears
-    if not gear1_stretches.empty:
-        max_speeds.append(gear1_stretches['speed'].max())
-    if not gear2_stretches.empty:
-        max_speeds.append(gear2_stretches['speed'].max())
+    # Calculate max speeds from all gear
+    for gear in gear_data_list:
+        stretches = gear.get('stretches')
+        if stretches is not None and not stretches.empty:
+            max_speeds.append(stretches['speed'].max())
     
     # Set a default max_r if no data
     max_r = max(max_speeds) if max_speeds else 20
     
-    # Plot PORT tack data (LEFT PLOT)
-    plot_port_polar(
-        ax_port, gear1_stretches, gear2_stretches, 
-        gear1_name, gear2_name, 
-        gear1_color, gear2_color,
-        wind_direction1, wind_direction2,
-        max_r
-    )
-    
-    # Plot STARBOARD tack data (RIGHT PLOT)
-    plot_starboard_polar(
-        ax_starboard, gear1_stretches, gear2_stretches, 
-        gear1_name, gear2_name, 
-        gear1_color, gear2_color,
-        wind_direction1, wind_direction2,
-        max_r
-    )
+    # Plot port and starboard tack data
+    plot_multi_polar(ax_port, ax_starboard, gear_data_list, colors, max_r)
     
     # Add legend for the gear types
     from matplotlib.lines import Line2D
-    legend_elements = [
-        Line2D([0], [0], marker='o', color='w', markerfacecolor=gear1_color, markersize=8, label=gear1_name),
-        Line2D([0], [0], marker='o', color='w', markerfacecolor=gear2_color, markersize=8, label=gear2_name)
-    ]
-    # Position the legend at the top to avoid overlapping with the text
-    fig.legend(handles=legend_elements, loc='upper center', bbox_to_anchor=(0.5, 0.96), ncol=2)
+    legend_elements = []
     
-    # Adjust layout - increase bottom margin to give text more room
+    for i, gear in enumerate(gear_data_list):
+        color = colors[i % len(colors)]
+        legend_elements.append(
+            Line2D([0], [0], marker='o', color='w', markerfacecolor=color, 
+                  markersize=8, label=gear['name'])
+        )
+    
+    # Position the legend at the top to avoid overlapping with the text
+    fig.legend(handles=legend_elements, loc='upper center', 
+               bbox_to_anchor=(0.5, 0.96), ncol=min(len(gear_data_list), 4))
+    
+    # Adjust layout - make the plots closer together by adjusting wspace
     plt.tight_layout()
-    plt.subplots_adjust(bottom=0.09, top=0.90)
+    plt.subplots_adjust(bottom=0.09, top=0.90, wspace=-0.45)  # Negative wspace brings them closer
     
     return fig
 
 
-def plot_port_polar(ax, gear1_stretches, gear2_stretches, gear1_name, gear2_name, gear1_color, gear2_color, wind_direction1, wind_direction2, max_r):
-    """Plot port tack data for both gears on the same axis."""
-    # Set up the polar plot
-    ax.set_theta_zero_location('N')  # 0 degrees at the top
-    ax.set_theta_direction(1)  # counter-clockwise (mirrored)
+def plot_multi_polar(ax_port, ax_starboard, gear_data_list, colors, max_r):
+    """Plot both port and starboard polars with multiple gear datasets."""
+    # Set up the port plot (LEFT PLOT)
+    ax_port.set_theta_zero_location('N')  # 0 degrees at the top
+    ax_port.set_theta_direction(1)  # counter-clockwise (mirrored)
+    ax_port.set_thetamin(0)
+    ax_port.set_thetamax(180)
     
-    # Set the theta limits to 0-180 degrees (only show the top half)
-    ax.set_thetamin(0)
-    ax.set_thetamax(180)
+    # Set up the starboard plot (RIGHT PLOT)
+    ax_starboard.set_theta_zero_location('N')  # 0 degrees at the top
+    ax_starboard.set_theta_direction(-1)  # clockwise
+    ax_starboard.set_thetamin(0)
+    ax_starboard.set_thetamax(180)
     
-    # Set consistent speed rings
+    # Set consistent speed rings for both plots
     radii = np.linspace(0, np.ceil(max_r), 6)
-    ax.set_rticks(radii)
-    ax.set_rlim(0, np.ceil(max_r) * 1.1)
+    ax_port.set_rticks(radii)
+    ax_port.set_rlim(0, np.ceil(max_r) * 1.1)
+    ax_starboard.set_rticks(radii)
+    ax_starboard.set_rlim(0, np.ceil(max_r) * 1.1)
     
-    # Filter for Port tack data for both gears
-    if not gear1_stretches.empty:
-        port_data1 = gear1_stretches[gear1_stretches['tack'] == 'Port'].copy()
-        plot_tack_data(ax, port_data1, gear1_color, marker='o', alpha=0.7)
+    # Plot data for each gear
+    for i, gear in enumerate(gear_data_list):
+        stretches = gear.get('stretches')
+        if stretches is None or stretches.empty:
+            continue
+        
+        # Convert from dict to DataFrame if needed (due to JSON serialization)
+        if isinstance(stretches, dict):
+            stretches = pd.DataFrame(stretches)
+            
+        color = colors[i % len(colors)]
+        
+        # PORT TACK
+        port_data = stretches[stretches['tack'] == 'Port']
+        if not port_data.empty:
+            plot_tack_data(ax_port, port_data, color, marker='o', alpha=0.7)
+        
+        # STARBOARD TACK
+        starboard_data = stretches[stretches['tack'] == 'Starboard']
+        if not starboard_data.empty:
+            plot_tack_data(ax_starboard, starboard_data, color, marker='s', alpha=0.7)
     
-    if not gear2_stretches.empty:
-        port_data2 = gear2_stretches[gear2_stretches['tack'] == 'Port'].copy()
-        plot_tack_data(ax, port_data2, gear2_color, marker='o', alpha=0.7)
-    
-    # Add important angle reference lines
+    # Add important angle reference lines to both plots
     angles = [0, 45, 90, 135, 180]
     labels = ["0°", "45°", "90°", "135°", "180°"]
     linestyles = [':', '--', '-', '--', ':']
-    colors = ['black', 'red', 'green', 'orange', 'black']
+    line_colors = ['black', 'red', 'green', 'orange', 'black']
     
-    for angle, label, ls, color in zip(angles, labels, linestyles, colors):
-        # Add radial lines at important angles
-        ax.plot([np.radians(angle), np.radians(angle)], [0, max_r * 1.1], 
+    for angle, label, ls, color in zip(angles, labels, linestyles, line_colors):
+        # Port plot
+        ax_port.plot([np.radians(angle), np.radians(angle)], [0, max_r * 1.1], 
                 ls=ls, color=color, alpha=0.5, linewidth=1)
+        ax_port.text(np.radians(angle), max_r * 1.07, label, 
+                ha='center', va='center', color=color, fontsize=9)
         
-        # Add angle labels just outside the plot
-        ax.text(np.radians(angle), max_r * 1.07, label, 
+        # Starboard plot
+        ax_starboard.plot([np.radians(angle), np.radians(angle)], [0, max_r * 1.1], 
+                ls=ls, color=color, alpha=0.5, linewidth=1)
+        ax_starboard.text(np.radians(angle), max_r * 1.07, label, 
                 ha='center', va='center', color=color, fontsize=9)
     
-    # Add title
-    ax.set_title('Port Tack', fontweight='bold', pad=15)
+    # Add titles
+    ax_port.set_title('Port Tack', fontweight='bold', pad=15)
+    ax_starboard.set_title('Starboard Tack', fontweight='bold', pad=15)
 
 
-def plot_starboard_polar(ax, gear1_stretches, gear2_stretches, gear1_name, gear2_name, gear1_color, gear2_color, wind_direction1, wind_direction2, max_r):
-    """Plot starboard tack data for both gears on the same axis."""
-    # Set up the polar plot
-    ax.set_theta_zero_location('N')  # 0 degrees at the top
-    ax.set_theta_direction(-1)  # clockwise
-    
-    # Set the theta limits to 0-180 degrees (only show the top half)
-    ax.set_thetamin(0)
-    ax.set_thetamax(180)
-    
-    # Set consistent speed rings
-    radii = np.linspace(0, np.ceil(max_r), 6)
-    ax.set_rticks(radii)
-    ax.set_rlim(0, np.ceil(max_r) * 1.1)
-    
-    # Filter for Starboard tack data for both gears
-    if not gear1_stretches.empty:
-        starboard_data1 = gear1_stretches[gear1_stretches['tack'] == 'Starboard'].copy()
-        plot_tack_data(ax, starboard_data1, gear1_color, marker='s', alpha=0.7)
-    
-    if not gear2_stretches.empty:
-        starboard_data2 = gear2_stretches[gear2_stretches['tack'] == 'Starboard'].copy()
-        plot_tack_data(ax, starboard_data2, gear2_color, marker='s', alpha=0.7)
-    
-    # Add important angle reference lines
-    angles = [0, 45, 90, 135, 180]
-    labels = ["0°", "45°", "90°", "135°", "180°"]
-    linestyles = [':', '--', '-', '--', ':']
-    colors = ['black', 'red', 'green', 'orange', 'black']
-    
-    for angle, label, ls, color in zip(angles, labels, linestyles, colors):
-        # Add radial lines at important angles
-        ax.plot([np.radians(angle), np.radians(angle)], [0, max_r * 1.1], 
-                ls=ls, color=color, alpha=0.5, linewidth=1)
-        
-        # Add angle labels just outside the plot
-        ax.text(np.radians(angle), max_r * 1.07, label, 
-                ha='center', va='center', color=color, fontsize=9)
-    
-    # Add title
-    ax.set_title('Starboard Tack', fontweight='bold', pad=15)
 
 
 def plot_tack_data(ax, tack_data, color, marker='o', alpha=0.7):
@@ -471,13 +454,12 @@ def create_gear_metrics_table(stretches, gear_info=None):
         st.markdown(f"**{section_name}**")
         section_df = pd.DataFrame(list(section_metrics.items()), columns=["Metric", "Value"])
         
-        # Add help tooltip for sections with Pointing Power
+        # Show explanation for Pointing Power
         if "Pointing Power ℹ️" in section_metrics:
-            st.table(section_df, 
-                help="Pointing Power is the average of the best pointing angles on port and starboard tacks. Lower numbers are better (closer to wind)."
-            )
-        else:
-            st.table(section_df)
+            st.caption("ℹ️ Pointing Power is the average of the best pointing angles on port and starboard tacks. Lower numbers are better (closer to wind).")
+            
+        # Display table
+        st.table(section_df)
 
 
 def calculate_pointing_power(stretches):
@@ -790,10 +772,12 @@ def create_comparison_table(stretches1, stretches2, gear1_name, gear2_name, gear
             columns=[gear1_name, gear2_name, "Difference (Better Gear)"]
         )
         
-        # Display with help tooltip for Pointing Power
-        st.table(upwind_df, 
-            help="Pointing Power is the average of the best pointing angles on port and starboard tacks. Lower numbers are better (closer to wind)."
-        )
+        # Add caption for Pointing Power explanation
+        if "Pointing Power ℹ️" in upwind_comparison:
+            st.caption("ℹ️ Pointing Power is the average of the best pointing angles on port and starboard tacks. Lower numbers are better (closer to wind).")
+            
+        # Display table
+        st.table(upwind_df)
     
     # Downwind comparison
     downwind1 = stretches1[stretches1['angle_to_wind'] >= 90]
@@ -871,8 +855,13 @@ def generate_session_card(session_data):
                 st.markdown(f"💨 **Wind:** {' at '.join(wind_info)}")
         
         with col3:
-            st.button("View Details", key=f"view_{session_data['id']}", 
-                      on_click=lambda: st.session_state.update({'selected_session': session_data['id']}))
+            cols = st.columns(2)
+            with cols[0]:
+                st.button("View", key=f"view_{session_data['id']}", 
+                          on_click=lambda: st.session_state.update({'selected_session': session_data['id']}))
+            with cols[1]:
+                st.button("Edit", key=f"edit_{session_data['id']}", 
+                          on_click=lambda: st.session_state.update({'edit_session': session_data['id']}))
         
         # Gear info
         cols = st.columns(3)
@@ -913,16 +902,128 @@ def show_session_list(session_data_list):
         st.markdown("---")
 
 
+def edit_session(session_data):
+    """Show form to edit session details."""
+    # Header with back button
+    col1, col2 = st.columns([1, 6])
+    with col1:
+        if st.button("← Back"):
+            st.session_state.edit_session = None
+            st.rerun()
+    with col2:
+        st.header(f"Edit Session: {session_data['name']}")
+    
+    # Edit form
+    with st.form("edit_session_form"):
+        # Session name
+        session_name = st.text_input("Session Name", value=session_data.get('name', ''))
+        
+        # Date picker
+        try:
+            current_date = datetime.fromisoformat(session_data.get('date', '')) if session_data.get('date') else None
+        except:
+            current_date = None
+            
+        session_date = st.date_input("Session Date", value=current_date)
+        
+        # Gear info
+        col1, col2 = st.columns(2)
+        with col1:
+            board = st.text_input("Board", value=session_data.get('board', ''), placeholder="E.g., Axis S-Series 5'2\"")
+            foil = st.text_input("Foil", value=session_data.get('foil', ''), placeholder="E.g., Armstrong CF2400")
+        
+        with col2:
+            wing = st.text_input("Wing", value=session_data.get('wing', ''), placeholder="E.g., Duotone Unit 5m")
+            wind_speed = st.number_input(
+                "Avg Wind Speed (knots)", 
+                min_value=0, max_value=50, 
+                value=session_data.get('wind_speed', 0) if session_data.get('wind_speed') else 0, 
+                step=1
+            )
+        
+        # Wind and location info
+        col1, col2 = st.columns(2)
+        with col1:
+            wind_range = st.text_input(
+                "Wind Range", 
+                value=session_data.get('wind_range', ''), 
+                placeholder="E.g., 15-20 knots"
+            )
+            conditions = st.text_input(
+                "Conditions", 
+                value=session_data.get('conditions', ''), 
+                placeholder="E.g., Choppy water, gusty"
+            )
+        
+        with col2:
+            location = st.text_input(
+                "Location", 
+                value=session_data.get('location', ''),
+                placeholder="E.g., San Francisco Bay"
+            )
+            # We don't allow editing the wind direction - it's calculated from the data
+        
+        # Notes
+        notes = st.text_area(
+            "Notes", 
+            value=session_data.get('notes', ''),
+            placeholder="Any additional info about this session"
+        )
+        
+        # Form submission
+        col1, col2 = st.columns([1, 1])
+        with col1:
+            cancel = st.form_submit_button("Cancel", type="secondary")
+        with col2:
+            submit = st.form_submit_button("Save Changes", type="primary")
+        
+        if submit:
+            # Update session data
+            updated_session = session_data.copy()
+            updated_session.update({
+                'name': session_name,
+                'date': session_date.isoformat() if session_date else None,
+                'board': board,
+                'foil': foil,
+                'wing': wing,
+                'wind_speed': wind_speed,
+                'wind_range': wind_range,
+                'conditions': conditions,
+                'location': location,
+                'notes': notes
+            })
+            
+            # Find the session in the list and update it
+            for i, s in enumerate(st.session_state.gear_comparison_data):
+                if s['id'] == session_data['id']:
+                    st.session_state.gear_comparison_data[i] = updated_session
+                    break
+            
+            # Return to session list
+            st.session_state.edit_session = None
+            st.success("Session updated successfully!")
+            st.rerun()
+            
+        if cancel:
+            st.session_state.edit_session = None
+            st.rerun()
+
+
 def show_session_detail(session_data):
     """Show detailed view of a single session."""
     # Header with back button
-    col1, col2 = st.columns([1, 6])
+    col1, col2, col3 = st.columns([1, 5, 1])
     with col1:
         if st.button("← Back"):
             st.session_state.selected_session = None
             st.rerun()
     with col2:
         st.header(session_data['name'])
+    with col3:
+        if st.button("Edit", key="edit_detail"):
+            st.session_state.edit_session = session_data['id']
+            st.session_state.selected_session = None
+            st.rerun()
     
     # Overview info
     with st.container(border=True):
@@ -996,6 +1097,19 @@ def show_session_detail(session_data):
         }
         
         create_gear_metrics_table(stretches, gear_info)
+        
+        # Add compare button
+        if st.button("Add to Comparison", key="add_to_comparison"):
+            # Add to selected session IDs for comparison
+            if 'selected_comparison_sessions' not in st.session_state:
+                st.session_state.selected_comparison_sessions = []
+                
+            if session_data['id'] not in st.session_state.selected_comparison_sessions:
+                st.session_state.selected_comparison_sessions.append(session_data['id'])
+                st.success(f"Added '{session_data['name']}' to comparison. Go to Compare tab to view.")
+            else:
+                st.info(f"'{session_data['name']}' is already in the comparison.")
+        
     else:
         st.warning("No segment data available for this session.")
     
@@ -1016,6 +1130,10 @@ def show_session_detail(session_data):
                     s for s in st.session_state.gear_comparison_data 
                     if s['id'] != session_data['id']
                 ]
+                # Remove from selected comparison sessions if present
+                if 'selected_comparison_sessions' in st.session_state and session_data['id'] in st.session_state.selected_comparison_sessions:
+                    st.session_state.selected_comparison_sessions.remove(session_data['id'])
+                    
                 # Reset view
                 st.session_state.selected_session = None
                 st.session_state.confirm_delete = None
@@ -1023,13 +1141,15 @@ def show_session_detail(session_data):
                 st.rerun()
 
 
-def compare_sessions(gear_data_list):
-    """Allow selection and comparison of two sessions."""
-    if len(gear_data_list) < 2:
-        st.warning("Need at least two saved sessions to compare. Go to Track Analysis to save more sessions.")
-        return False
+def select_sessions_sidebar(gear_data_list):
+    """Show session selection checkboxes in the sidebar.
     
-    st.subheader("Compare Gear Sessions")
+    Returns:
+        list: List of selected session data
+    """
+    if len(gear_data_list) < 2:
+        st.sidebar.warning("Need at least two saved sessions. Go to Track Analysis to save more sessions.")
+        return []
     
     # Sort by date if available, otherwise by ID
     sorted_sessions = sorted(
@@ -1038,155 +1158,187 @@ def compare_sessions(gear_data_list):
         reverse=True
     )
     
-    # Create selection dropdowns
-    col1, col2 = st.columns(2)
+    # Initialize selected sessions in session state if not already there
+    if 'selected_comparison_sessions' not in st.session_state:
+        # Default to selecting the first two sessions
+        st.session_state.selected_comparison_sessions = [sorted_sessions[0]['id'], sorted_sessions[1]['id']] if len(sorted_sessions) >= 2 else []
     
-    with col1:
-        gear1_options = {f"{i}: {s['name']}": i for i, s in enumerate(sorted_sessions)}
-        gear1_selection = st.selectbox(
-            "Gear 1 (Reference)", 
-            options=list(gear1_options.keys()),
-            key="gear1_select"
-        )
-        gear1_index = gear1_options[gear1_selection]
-        gear1_data = sorted_sessions[gear1_index]
+    st.sidebar.markdown("### Select Sessions to Compare")
     
-    with col2:
-        # Filter out the already selected gear
-        gear2_options = {
-            f"{i}: {s['name']}": i for i, s in enumerate(sorted_sessions) 
-            if i != gear1_index
-        }
-        gear2_selection = st.selectbox(
-            "Gear 2 (Comparison)", 
-            options=list(gear2_options.keys()),
-            key="gear2_select"
-        )
-        gear2_index = gear2_options[gear2_selection]
-        gear2_data = sorted_sessions[gear2_index]
+    # Create a checkbox for each session
+    selected_session_ids = []
+    for i, session in enumerate(sorted_sessions):
+        # Create a checkbox for each session
+        is_selected = session['id'] in st.session_state.selected_comparison_sessions
+        if st.sidebar.checkbox(
+            f"{session['name']} ({session.get('date', 'No date')})",
+            value=is_selected,
+            key=f"select_{session['id']}"
+        ):
+            selected_session_ids.append(session['id'])
     
-    # "Compare" button
-    if st.button("Compare Gear", type="primary", key="compare_gear_button"):
-        if st.session_state.get('show_comparison') != [gear1_index, gear2_index]:
-            st.session_state.show_comparison = [gear1_index, gear2_index]
-            st.rerun()
+    # Update session state
+    st.session_state.selected_comparison_sessions = selected_session_ids
     
-    # Return whether we should show comparison
-    comparison_ids = getattr(st.session_state, 'show_comparison', None)
-    return comparison_ids == [gear1_index, gear2_index]
+    # Create apply button
+    if st.sidebar.button("Apply Selection", type="primary", key="apply_session_selection"):
+        st.rerun()
+    
+    # Return the selected sessions data
+    selected_sessions = [s for s in sorted_sessions if s['id'] in selected_session_ids]
+    return selected_sessions
 
 
-def run_comparison(gear1_data, gear2_data):
-    """Run detailed comparison between two gear sessions."""
-    st.header(f"Comparison: {gear1_data['name']} vs {gear2_data['name']}")
+def run_multi_comparison(selected_sessions):
+    """Run detailed comparison between multiple gear sessions."""
+    # Generate header with all session names
+    if len(selected_sessions) == 2:
+        header_text = f"Comparison: {selected_sessions[0]['name']} vs {selected_sessions[1]['name']}"
+    else:
+        names = [s['name'] for s in selected_sessions]
+        header_text = f"Multi-Gear Comparison: {', '.join(names[:-1])} and {names[-1]}"
     
-    # Get stretches data
-    stretches1 = gear1_data.get('stretches')
-    stretches2 = gear2_data.get('stretches')
+    st.header(header_text)
     
-    # Convert from dict to DataFrame if needed (due to JSON serialization)
-    if isinstance(stretches1, dict):
-        stretches1 = pd.DataFrame(stretches1)
-    if isinstance(stretches2, dict):
-        stretches2 = pd.DataFrame(stretches2)
-    
-    if stretches1 is None or stretches2 is None or stretches1.empty or stretches2.empty:
-        st.warning("One or both sessions have no segment data for comparison.")
-        return
-    
-    # Add key headline stats at the top
-    st.write("### Key Performance Highlights")
-    
-    # Calculate headline metrics
-    headline_metrics = calculate_headline_metrics(
-        stretches1, stretches2, gear1_data['name'], gear2_data['name']
-    )
-    
-    # Display headline metrics in 4 columns
-    cols = st.columns(4)
-    
-    with cols[0]:  # Upwind Angle
-        better_upwind = headline_metrics['better_upwind']
-        st.metric(
-            "Better Upwind",
-            f"{better_upwind['name']}",
-            f"{better_upwind['angle']:.1f}° to wind",
-            help="Gear that points closer to the wind (smaller angle is better for upwind)"
-        )
-    
-    with cols[1]:  # Upwind Speed
-        faster_upwind = headline_metrics['faster_upwind']
-        st.metric(
-            "Faster Upwind",
-            f"{faster_upwind['name']}",
-            f"{faster_upwind['speed']:.1f} knots",
-            help="Gear with higher average speed when sailing upwind"
-        )
-    
-    with cols[2]:  # Downwind Angle
-        better_downwind = headline_metrics['better_downwind']
-        st.metric(
-            "Better Downwind",
-            f"{better_downwind['name']}",
-            f"{better_downwind['angle']:.1f}° to wind",
-            help="Gear that sails deeper downwind (larger angle is better for downwind)"
-        )
+    # Process stretches data for all sessions
+    for session in selected_sessions:
+        stretches = session.get('stretches')
         
-    with cols[3]:  # Downwind Speed
-        faster_downwind = headline_metrics['faster_downwind']
-        st.metric(
-            "Faster Downwind",
-            f"{faster_downwind['name']}",
-            f"{faster_downwind['speed']:.1f} knots",
-            help="Gear with higher average speed when sailing downwind"
-        )
+        # Convert from dict to DataFrame if needed (due to JSON serialization)
+        if isinstance(stretches, dict):
+            session['stretches'] = pd.DataFrame(stretches)
+            
+        # Ensure we have data
+        if session['stretches'] is None or session['stretches'].empty:
+            st.warning(f"Session '{session['name']}' has no segment data.")
+            return
+    
+    # Plot the comparative polar diagram
+    st.write("### Polar Performance Comparison")
+    fig = create_combined_polars(selected_sessions)
+    st.pyplot(fig)
     
     # Show gear specs comparison
     st.write("### Gear Specifications")
     
+    # Create comparison table with all gear specs
     gear_comparison = {}
     for field in ['board', 'foil', 'wing', 'wind_speed', 'wind_range', 'conditions', 'location']:
-        gear1_val = gear1_data.get(field, 'N/A')
-        gear2_val = gear2_data.get(field, 'N/A')
+        # Collect values from all sessions
+        has_value = False
+        field_values = []
         
-        # Format wind_speed with "knots" if available
-        if field == 'wind_speed' and gear1_val != 'N/A' and gear1_val > 0:
-            gear1_val = f"{gear1_val} knots"
-        if field == 'wind_speed' and gear2_val != 'N/A' and gear2_val > 0:
-            gear2_val = f"{gear2_val} knots"
+        for session in selected_sessions:
+            val = session.get(field, 'N/A')
+            
+            # Format wind_speed with "knots" if available
+            if field == 'wind_speed' and val != 'N/A' and val > 0:
+                val = f"{val} knots"
+                
+            field_values.append(val)
+            if val != 'N/A':
+                has_value = True
         
-        # Skip if both values are N/A
-        if gear1_val == 'N/A' and gear2_val == 'N/A':
+        # Skip if no session has a value for this field
+        if not has_value:
             continue
             
         # Add to comparison dict
-        gear_comparison[field.capitalize()] = [gear1_val, gear2_val]
+        gear_comparison[field.capitalize()] = field_values
     
     # Create comparison table if we have specs
     if gear_comparison:
+        column_names = [s['name'] for s in selected_sessions]
         gear_df = pd.DataFrame.from_dict(
             gear_comparison,
             orient='index',
-            columns=[gear1_data['name'], gear2_data['name']]
+            columns=column_names
         )
         st.table(gear_df)
     
-    # Plot the comparative polar diagram
-    st.write("### Polar Performance Comparison")
-    fig = create_combined_polars(
-        stretches1, stretches2, 
-        gear1_data['name'], gear2_data['name'], 
-        gear1_data['wind_direction'], gear2_data['wind_direction']
-    )
-    st.pyplot(fig)
+    # Create comparison tables for performance metrics
+    st.write("### Performance Comparison")
     
-    # Show direct comparisons between the two gear types
-    st.write("### Head-to-Head Comparison")
-    create_comparison_table(
-        stretches1, stretches2, 
-        gear1_data['name'], gear2_data['name'],
-        gear1_data, gear2_data
-    )
+    # Create a DataFrame with key metrics for all sessions
+    metrics_data = []
+    
+    for session in selected_sessions:
+        stretches = session['stretches']
+        
+        # Calculate key metrics
+        upwind = stretches[stretches['angle_to_wind'] < 90]
+        downwind = stretches[stretches['angle_to_wind'] >= 90]
+        
+        # Calculate pointing power
+        pointing_power, _, _ = calculate_pointing_power(stretches)
+        
+        # Calculate clustered upwind speed
+        clustered_avg_speed, clustered_max_speed, _, _ = calculate_clustered_upwind_speed(stretches)
+        
+        # Create metrics row
+        row = {
+            'Session': session['name'],
+            'Pointing Power (°)': round(pointing_power, 1) if pointing_power is not None else 'N/A',
+            'Best Upwind Angle (°)': round(upwind['angle_to_wind'].min(), 1) if not upwind.empty else 'N/A',
+            'Clustered Upwind Speed (knots)': round(clustered_avg_speed, 1) if clustered_avg_speed is not None else 'N/A',
+            'Max Speed (knots)': round(stretches['speed'].max(), 1),
+            'Avg Speed (knots)': round(stretches['speed'].mean(), 1),
+            'Best Downwind Angle (°)': round(downwind['angle_to_wind'].max(), 1) if not downwind.empty else 'N/A',
+            'Downwind Avg Speed (knots)': round(downwind['speed'].mean(), 1) if not downwind.empty else 'N/A'
+        }
+        
+        metrics_data.append(row)
+    
+    # Create DataFrame and display
+    metrics_df = pd.DataFrame(metrics_data)
+    
+    # Show tooltip separately instead of in the dataframe parameters
+    st.info("""
+    **Pointing Power**: Average of best port/starboard pointing angles. Lower is better (closer to wind).
+    **Clustered Upwind Speed**: Average speed calculated from the cluster of best pointing segments.
+    """)
+    
+    # Display dataframe - check if hide_index is supported in your Streamlit version
+    try:
+        # For newer versions of Streamlit
+        st.dataframe(metrics_df, use_container_width=True, hide_index=True)
+    except:
+        # Fallback for older versions
+        st.dataframe(metrics_df, use_container_width=True)
+    
+    # Explain the clustering calculation in an expander
+    with st.expander("About Upwind Speed Calculation"):
+        st.markdown("""
+        **Clustered Upwind Speed** is based on a cluster of best pointing tacks, rather than all upwind tacks.
+        
+        The calculation:
+        1. Identifies the best pointing tacks for each side (up to 3 per tack)
+        2. Calculates the average pointing angle from these best tacks
+        3. Includes only tacks that are within 10° of that average
+        4. Calculates speed metrics from this cluster
+        
+        This approach gives a more accurate representation of upwind performance at competitive pointing angles.
+        """)
+    
+    # Generate visualization for each session's upwind clusters
+    with st.expander("Upwind Clusters Visualization"):
+        # Split into rows with 2 sessions per row
+        for i in range(0, len(selected_sessions), 2):
+            cols = st.columns(2)
+            for j in range(2):
+                if i + j < len(selected_sessions):
+                    session = selected_sessions[i + j]
+                    with cols[j]:
+                        st.markdown(f"**{session['name']} Upwind Cluster**")
+                        
+                        # Calculate clusters
+                        _, _, cluster_indices, _ = calculate_clustered_upwind_speed(session['stretches'])
+                        
+                        # Create visualization
+                        if cluster_indices:
+                            fig = visualize_upwind_clusters(session['stretches'], cluster_indices)
+                            if fig:
+                                st.pyplot(fig)
     
     # Add AI analysis section (placeholder for future implementation)
     st.write("### AI Performance Analysis")
@@ -1205,9 +1357,27 @@ def st_main():
     
     if 'selected_session' not in st.session_state:
         st.session_state.selected_session = None
+        
+    if 'edit_session' not in st.session_state:
+        st.session_state.edit_session = None
     
-    # Main page flow control
-    if st.session_state.selected_session is not None:
+    # Selection sidebar (visible everywhere) - show on all pages to make it easy to compare
+    selected_sessions = select_sessions_sidebar(st.session_state.gear_comparison_data)
+    
+    # Main page flow control based on state
+    if st.session_state.edit_session is not None:
+        # Edit view for a specific session
+        session_to_edit = next(
+            (s for s in st.session_state.gear_comparison_data if s['id'] == st.session_state.edit_session), 
+            None
+        )
+        if session_to_edit:
+            edit_session(session_to_edit)
+        else:
+            st.error("Session not found.")
+            st.session_state.edit_session = None
+            st.rerun()
+    elif st.session_state.selected_session is not None:
         # Detail view for a specific session
         session = next(
             (s for s in st.session_state.gear_comparison_data if s['id'] == st.session_state.selected_session), 
@@ -1231,27 +1401,30 @@ def st_main():
             show_session_list(st.session_state.gear_comparison_data)
             
         with tab2:
-            # Compare two sessions
-            if len(st.session_state.gear_comparison_data) >= 2:
-                # Allow selection of sessions to compare
-                show_comparison = compare_sessions(st.session_state.gear_comparison_data)
-                
-                # If "Compare" button was clicked
-                if show_comparison:
-                    # Get the selected sessions
-                    gear1_idx, gear2_idx = st.session_state.show_comparison
-                    sorted_sessions = sorted(
-                        st.session_state.gear_comparison_data,
-                        key=lambda x: (x.get('date', '0') or '0', x['id']),
-                        reverse=True
-                    )
-                    gear1_data = sorted_sessions[gear1_idx]
-                    gear2_data = sorted_sessions[gear2_idx]
-                    
-                    # Run the comparison
-                    run_comparison(gear1_data, gear2_data)
+            # Compare multiple sessions
+            if len(selected_sessions) >= 2:
+                # Run the comparison with all selected sessions
+                run_multi_comparison(selected_sessions)
             else:
-                st.info("Add at least two sessions from the Track Analysis page to enable comparisons.")
+                st.info("Select at least two sessions from the sidebar to compare.")
+                
+                # If we have sessions but none selected, prompt the user
+                if len(st.session_state.gear_comparison_data) >= 2:
+                    st.markdown("### How to use the comparison tool:")
+                    st.markdown("""
+                    1. Select the sessions you want to compare from the sidebar on the left
+                    2. Click "Apply Selection" to view the comparison
+                    3. You can select and compare as many sessions as you want
+                    
+                    The comparison will show:
+                    - A combined polar diagram with all selected sessions
+                    - Gear specifications table
+                    - Performance metrics comparison
+                    - Visualization of upwind clusters for each session
+                    """)
+            
+            if len(st.session_state.gear_comparison_data) < 2:
+                st.warning("Add at least two sessions from the Track Analysis page to enable comparisons.")
 
 
 # Run the app if called directly
