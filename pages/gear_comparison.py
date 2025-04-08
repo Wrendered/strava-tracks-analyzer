@@ -5,7 +5,9 @@ import matplotlib.pyplot as plt
 import logging
 import os
 import json
+import time
 from datetime import datetime
+from anthropic import Anthropic
 
 # Configure logging
 logging.basicConfig(
@@ -19,6 +21,226 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 from utils.visualization import plot_polar_diagram
+
+# Initialize Anthropic client for Claude AI
+def get_anthropic_client():
+    """Get Anthropic client with API key from environment."""
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        # Check if we have it in session state (can be set by user)
+        if "anthropic_api_key" in st.session_state:
+            api_key = st.session_state.anthropic_api_key
+            
+    if not api_key:
+        raise ValueError("ANTHROPIC_API_KEY not found in environment variables or session state")
+        
+    return Anthropic(api_key=api_key)
+
+def generate_ai_comparison_analysis(gear_sessions):
+    """Generate AI analysis of gear comparison data using Claude.
+    
+    Args:
+        gear_sessions: List of gear session data dictionaries
+        
+    Returns:
+        str: Generated analysis text
+    """
+    if len(gear_sessions) < 2:
+        return "Need at least two gear setups to compare."
+    
+    # Format the gear data for Claude
+    formatted_data = format_gear_data_for_ai(gear_sessions)
+    
+    # Create the prompt for Claude
+    prompt = f"""As a wingfoil performance analyst, I'm reviewing the following gear comparison data.
+Please provide a detailed analysis highlighting key performance differences between the gear setups.
+
+You should include:
+1. Overall performance comparison
+2. Upwind capabilities analysis (pointing angles and speeds)
+3. Downwind capabilities analysis
+4. Specific gear strengths and weaknesses
+5. Recommendations based on conditions
+
+Your analysis should be specific, data-driven, and actionable for wingfoilers looking to improve their gear selection.
+
+Here's the gear comparison data:
+{formatted_data}
+
+Please provide a concise, well-structured analysis with clear sections and headers."""
+
+    # Call Claude API
+    try:
+        client = get_anthropic_client()
+        
+        response = client.messages.create(
+            model="claude-3-haiku-20240307",
+            max_tokens=1500,
+            temperature=0.3,
+            messages=[
+                {"role": "user", "content": prompt}
+            ]
+        )
+        
+        # Extract the analysis text
+        analysis = response.content[0].text
+        return analysis
+    
+    except Exception as e:
+        logger.error(f"Error generating AI analysis: {str(e)}")
+        raise e
+
+def format_gear_data_for_ai(gear_sessions):
+    """Format gear comparison data for Claude.
+    
+    Args:
+        gear_sessions: List of gear session data dictionaries
+        
+    Returns:
+        str: Formatted gear data as text
+    """
+    result = []
+    
+    # Add gear specifications
+    result.append("## Gear Specifications")
+    for i, session in enumerate(gear_sessions, 1):
+        result.append(f"\nGear Setup {i}: {session['name']}")
+        
+        if session.get('board'):
+            result.append(f"- Board: {session['board']}")
+        if session.get('foil'):
+            result.append(f"- Foil: {session['foil']}")
+        if session.get('wing'):
+            result.append(f"- Wing: {session['wing']}")
+        if session.get('wind_speed') and session['wind_speed'] > 0:
+            result.append(f"- Wind Speed: {session['wind_speed']} knots")
+        if session.get('wind_range'):
+            result.append(f"- Wind Range: {session['wind_range']}")
+        if session.get('conditions'):
+            result.append(f"- Conditions: {session['conditions']}")
+        if session.get('location'):
+            result.append(f"- Location: {session['location']}")
+    
+    # Add performance metrics
+    result.append("\n## Performance Metrics")
+    
+    # Create a table-like structure for easy comparison
+    metrics_table = ["| Metric | " + " | ".join([f"{s['name']}" for s in gear_sessions]) + " |"]
+    metrics_table.append("|" + "---|" * (len(gear_sessions) + 1))
+    
+    # Extract and format key metrics
+    metrics = []
+    
+    # Overall max speed
+    speeds = []
+    for session in gear_sessions:
+        if 'stretches' in session and not session['stretches'].empty:
+            if isinstance(session['stretches'], pd.DataFrame):
+                speeds.append(f"{session['stretches']['speed'].max():.1f} knots")
+            else:
+                # Handle case where stretches might be a dict from JSON serialization
+                stretches_df = pd.DataFrame(session['stretches'])
+                speeds.append(f"{stretches_df['speed'].max():.1f} knots")
+        else:
+            speeds.append("N/A")
+    metrics_table.append("| Max Speed | " + " | ".join(speeds) + " |")
+    
+    # Average speed
+    avg_speeds = []
+    for session in gear_sessions:
+        if 'stretches' in session and not session['stretches'].empty:
+            if isinstance(session['stretches'], pd.DataFrame):
+                avg_speeds.append(f"{session['stretches']['speed'].mean():.1f} knots")
+            else:
+                # Handle case where stretches might be a dict from JSON serialization
+                stretches_df = pd.DataFrame(session['stretches'])
+                avg_speeds.append(f"{stretches_df['speed'].mean():.1f} knots")
+        else:
+            avg_speeds.append("N/A")
+    metrics_table.append("| Avg Speed | " + " | ".join(avg_speeds) + " |")
+    
+    # Pointing power (best upwind angle)
+    upwind_angles = []
+    for session in gear_sessions:
+        if 'stretches' in session and not session['stretches'].empty:
+            stretches = session['stretches']
+            if not isinstance(stretches, pd.DataFrame):
+                stretches = pd.DataFrame(stretches)
+                
+            # Calculate pointing power
+            pointing_power, _, _ = calculate_pointing_power(stretches)
+            if pointing_power is not None:
+                upwind_angles.append(f"{pointing_power:.1f}°")
+            else:
+                upwind_angles.append("N/A")
+        else:
+            upwind_angles.append("N/A")
+    metrics_table.append("| Pointing Power | " + " | ".join(upwind_angles) + " |")
+    
+    # Best downwind angle
+    downwind_angles = []
+    for session in gear_sessions:
+        if 'stretches' in session and not session['stretches'].empty:
+            stretches = session['stretches']
+            if not isinstance(stretches, pd.DataFrame):
+                stretches = pd.DataFrame(stretches)
+                
+            # Get downwind data
+            downwind = stretches[stretches['angle_to_wind'] >= 90]
+            if not downwind.empty:
+                downwind_angles.append(f"{downwind['angle_to_wind'].max():.1f}°")
+            else:
+                downwind_angles.append("N/A")
+        else:
+            downwind_angles.append("N/A")
+    metrics_table.append("| Best Downwind Angle | " + " | ".join(downwind_angles) + " |")
+    
+    # Upwind speed
+    upwind_speeds = []
+    for session in gear_sessions:
+        if 'stretches' in session and not session['stretches'].empty:
+            stretches = session['stretches']
+            if not isinstance(stretches, pd.DataFrame):
+                stretches = pd.DataFrame(stretches)
+                
+            # Calculate clustered upwind speed
+            clustered_avg_speed, _, _, _ = calculate_clustered_upwind_speed(stretches)
+            if clustered_avg_speed is not None:
+                upwind_speeds.append(f"{clustered_avg_speed:.1f} knots")
+            else:
+                upwind_speeds.append("N/A")
+        else:
+            upwind_speeds.append("N/A")
+    metrics_table.append("| Upwind Speed | " + " | ".join(upwind_speeds) + " |")
+    
+    # Downwind speed
+    downwind_speeds = []
+    for session in gear_sessions:
+        if 'stretches' in session and not session['stretches'].empty:
+            stretches = session['stretches']
+            if not isinstance(stretches, pd.DataFrame):
+                stretches = pd.DataFrame(stretches)
+                
+            # Get downwind data
+            downwind = stretches[stretches['angle_to_wind'] >= 90]
+            if not downwind.empty:
+                downwind_speeds.append(f"{downwind['speed'].mean():.1f} knots")
+            else:
+                downwind_speeds.append("N/A")
+        else:
+            downwind_speeds.append("N/A")
+    metrics_table.append("| Downwind Speed | " + " | ".join(downwind_speeds) + " |")
+    
+    # Add the metrics table to the result
+    result.extend(metrics_table)
+    
+    # Add explanation for metrics
+    result.append("\n## Metrics Explanation")
+    result.append("- Pointing Power: Average of best pointing angles on port and starboard tacks. Lower is better (closer to wind).")
+    result.append("- Upwind Speed: Average speed calculated from the cluster of best pointing segments.")
+    result.append("- Downwind Speed: Average speed on all downwind segments (angle to wind >= 90°).")
+    
+    return "\n".join(result)
 
 
 def create_combined_polars(gear_data_list):
@@ -1529,11 +1751,51 @@ def run_multi_comparison(selected_sessions):
                             if fig:
                                 st.pyplot(fig)
     
-    # Add AI analysis section (placeholder for future implementation)
+    # AI analysis section with Claude integration
     st.write("### AI Performance Analysis")
-    if st.button("Generate AI Analysis", key="generate_ai_analysis"):
-        with st.spinner("Analyzing performance data..."):
-            st.info("AI analysis feature coming soon! This will generate natural language insights about performance differences.")
+    
+    # API key input - only show if we don't have a key in environment
+    if not os.environ.get("ANTHROPIC_API_KEY") and "anthropic_api_key" not in st.session_state:
+        with st.expander("🔑 Set Anthropic API Key", expanded=True):
+            st.markdown("""
+            To use the AI analysis feature, you need an Anthropic API key. 
+            
+            You can get one at [anthropic.com](https://www.anthropic.com/).
+            """)
+            
+            api_key = st.text_input(
+                "Anthropic API Key",
+                type="password",
+                placeholder="Enter your Anthropic API key",
+                help="Your API key will be stored in session state only and not permanently saved."
+            )
+            
+            if api_key:
+                st.session_state.anthropic_api_key = api_key
+                st.success("API key set! You can now use the AI analysis feature.")
+                time.sleep(1)
+                st.rerun()
+    
+    # Only show generate button if we have a key
+    api_key_available = os.environ.get("ANTHROPIC_API_KEY") or "anthropic_api_key" in st.session_state
+    
+    if api_key_available:
+        if st.button("Generate AI Analysis", key="generate_ai_analysis"):
+            with st.spinner("Analyzing performance data with Claude..."):
+                try:
+                    # Get AI analysis of the gear comparison
+                    analysis = generate_ai_comparison_analysis(selected_sessions)
+                    
+                    # Display the analysis in a nice container
+                    with st.container(border=True):
+                        st.markdown("#### 🤖 Claude AI Analysis")
+                        st.markdown(analysis)
+                        st.caption("Analysis provided by Claude (Anthropic)")
+                except Exception as e:
+                    st.error(f"Error generating AI analysis: {str(e)}")
+                    st.info("Please make sure your Anthropic API key is valid.")
+    else:
+        st.info("Set your Anthropic API key above to enable AI analysis.")
 
 
 def st_main():
