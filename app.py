@@ -17,7 +17,10 @@ logger = logging.getLogger(__name__)
 
 from utils.gpx_parser import load_gpx_file
 from utils.calculations import calculate_track_metrics
-from utils.analysis import find_consistent_angle_stretches, analyze_wind_angles, estimate_wind_direction
+from utils.analysis import find_consistent_angle_stretches, analyze_wind_angles as analyze_wind_angles_orig, estimate_wind_direction
+
+# Rename to avoid conflicts
+analyze_wind_angles = analyze_wind_angles_orig
 from utils.visualization import display_track_map, plot_bearing_distribution, plot_polar_diagram
 
 def main():
@@ -190,10 +193,18 @@ def single_track_analysis():
                     "Fine-tune Wind Direction", 
                     min_value=max(0, int(estimated) - 20),
                     max_value=min(359, int(estimated) + 20),
-                    value=int(st.session_state.wind_direction) if st.session_state.wind_direction is not None else int(estimated)
+                    value=int(st.session_state.wind_direction) if st.session_state.wind_direction is not None else int(estimated),
+                    key="wind_fine_tune"
                 )
                 wind_direction = adjusted_wind
-                st.session_state.wind_direction = wind_direction
+                
+                # Update wind direction and force a refresh if it changed
+                if wind_direction != st.session_state.wind_direction:
+                    st.session_state.wind_direction = wind_direction
+                    # Add a button to apply wind direction changes immediately
+                    if st.button("Apply Wind Direction", type="primary"):
+                        # This will trigger a rerun with the updated wind direction
+                        st.rerun()
             else:
                 # No estimate yet
                 wind_direction = st.session_state.wind_direction
@@ -228,6 +239,22 @@ def single_track_analysis():
             - Additional analysis options
             - Fine-tuning of algorithm parameters
             """, icon="ℹ️")
+        
+        # Always show suspicious angle threshold - this is important for accurate analysis
+        # Default to 20 degrees - below this is usually not physically possible
+        if 'suspicious_angle_threshold' not in st.session_state:
+            st.session_state.suspicious_angle_threshold = 20
+            
+        suspicious_angle_threshold = st.slider(
+            "Suspicious Angle Threshold (°)", 
+            min_value=10, 
+            max_value=35, 
+            value=st.session_state.suspicious_angle_threshold,
+            help="Angles closer to wind than this are considered suspicious and excluded from wind direction estimation"
+        )
+        
+        # Update the threshold in session state
+        st.session_state.suspicious_angle_threshold = suspicious_angle_threshold
         
         if advanced_mode:
             wind_estimation_method = st.radio(
@@ -274,7 +301,7 @@ def single_track_analysis():
             st.session_state.track_name = None
             st.session_state.wind_direction = 90
             st.session_state.estimated_wind = None
-            st.experimental_rerun()
+            st.rerun()
     
     # Process new file upload or use session state data
     if uploaded_file is not None:
@@ -427,10 +454,32 @@ def single_track_analysis():
                 # Always try to estimate wind direction for comparison
                 estimated_wind = None
                 try:
-                    estimated_wind = estimate_wind_direction(stretches, use_simple_method=use_simple_method)
+                    # First try the new upwind tack analysis method
+                    # This requires angles to be calculated with some initial wind direction
+                    # We use default wind direction (90°) as starting point
+                    initial_wind = 90
+                    temp_stretches = analyze_wind_angles(stretches, initial_wind)
+                    
+                    # Try to get wind direction using the new tack-based method
+                    from utils.analysis import estimate_wind_direction_from_upwind_tacks
+                    # Pass the suspicious angle threshold from user settings
+                    estimated_wind = estimate_wind_direction_from_upwind_tacks(
+                        temp_stretches, 
+                        suspicious_angle_threshold=suspicious_angle_threshold
+                    )
+                    
+                    # If the new method succeeded, use it
                     if estimated_wind is not None:
-                        logger.info(f"Estimated wind direction: {estimated_wind:.1f}° (using {'simple' if use_simple_method else 'complex'} method)")
-                        
+                        logger.info(f"Estimated wind direction: {estimated_wind:.1f}° (using upwind tack analysis)")
+                        estimation_method = "upwind tack analysis"
+                    else:
+                        # Fall back to standard method
+                        estimated_wind = estimate_wind_direction(stretches, use_simple_method=use_simple_method)
+                        if estimated_wind is not None:
+                            logger.info(f"Estimated wind direction: {estimated_wind:.1f}° (using {'simple' if use_simple_method else 'complex'} method)")
+                            estimation_method = "standard clustering"
+                    
+                    if estimated_wind is not None:
                         # Save to session state
                         st.session_state.estimated_wind = estimated_wind
                         
@@ -439,10 +488,10 @@ def single_track_analysis():
                             # Display success and use the estimated value
                             wind_direction = estimated_wind
                             st.session_state.wind_direction = wind_direction
-                            st.sidebar.success(f"Using estimated wind direction: {estimated_wind:.1f}°")
+                            st.sidebar.success(f"Using estimated wind direction: {estimated_wind:.1f}° ({estimation_method})")
                         else:
                             # In manual mode, just show the estimated value for comparison
-                            st.sidebar.info(f"Estimated wind direction: {estimated_wind:.1f}°")
+                            st.sidebar.info(f"Estimated wind direction: {estimated_wind:.1f}° ({estimation_method})")
                     else:
                         if auto_detect_wind:
                             logger.warning("Could not estimate wind direction, using default")
@@ -457,11 +506,12 @@ def single_track_analysis():
                     # We keep the default or manually overridden value of wind_direction
                     pass
                 
-                # Calculate angles relative to wind
+                # Calculate angles relative to wind - this is critical for all visualizations
+                # This ensures the angles and upwind/downwind classification use the current wind_direction
                 stretches = analyze_wind_angles(stretches, wind_direction)
                 
-                # Save the analyzed stretches to session state
-                st.session_state.track_stretches = stretches
+                # Save the analyzed stretches to session state - create a copy to avoid reference issues
+                st.session_state.track_stretches = stretches.copy()
                 
                 # Reorganize the layout with tabs for better organization 
                 st.write("## 🌊 Track Analysis Dashboard 🪂")
@@ -486,8 +536,8 @@ def single_track_analysis():
                 # Add index as segment ID 
                 display_df = display_df.reset_index()
                 
-                # Flag suspicious values (small angles to wind)
-                display_df['suspicious'] = display_df['angle_to_wind'] < 15
+                # Flag suspicious values based on user's threshold setting
+                display_df['suspicious'] = display_df['angle_to_wind'] < suspicious_angle_threshold
                 
                 # Add a column for segment selection
                 # Initialize selected_segments with all original indices if not already set
@@ -538,13 +588,13 @@ def single_track_analysis():
                                 st.session_state.filter_changes = {'upwind_selected': False, 'downwind_selected': False, 
                                                               'suspicious_removed': False, 'best_speed_selected': False}
                                 st.session_state.selected_segments = display_df['original_index'].tolist()
-                                st.experimental_rerun()
+                                st.rerun()
                         with row1_cols[1]:
                             if st.button("❌ None", key="none_btn", help="Deselect all segments", use_container_width=True):
                                 st.session_state.filter_changes = {'upwind_selected': False, 'downwind_selected': False, 
                                                               'suspicious_removed': False, 'best_speed_selected': False}
                                 st.session_state.selected_segments = []
-                                st.experimental_rerun()
+                                st.rerun()
                                 
                         # Direction and Quality Filters in two columns for density
                         filt_cols = st.columns(2)
@@ -564,8 +614,8 @@ def single_track_analysis():
                             fastest = st.checkbox("⚡ Fastest Only", value=st.session_state.filter_changes['best_speed_selected'], key="speed_check")
                             st.session_state.filter_changes['best_speed_selected'] = fastest
                         
-                        # Add Apply button
-                        apply_button = st.button("✅ Apply Filters", type="primary", key="apply_filters", use_container_width=True)
+                        # Add Apply button - make it more prominent
+                        apply_button = st.button("✅ Apply Filters & Recalculate", type="primary", key="apply_filters", use_container_width=True, help="Apply filters and recalculate all metrics with current wind direction")
                     
                     # Process filters and update selection
                     # Initialize filter indicators
@@ -609,10 +659,83 @@ def single_track_analysis():
                         st.success(f"**Active filters:** {', '.join(filter_text)}")
                     else:
                         st.info("**No filters active** - showing all segments")
+                        
+                    # Add a button to re-estimate wind direction based on selected segments only
+                    st.write("**Wind Direction Estimation:**")
+                    
+                    # Get the filtered segments for estimation
+                    if filtered_segments and len(filtered_segments) > 0:
+                        estimation_stretches = stretches.loc[stretches.index.isin(filtered_segments)]
+                        segment_count = len(estimation_stretches)
+                    else:
+                        estimation_stretches = stretches
+                        segment_count = len(stretches)
+                        
+                    if st.button("🧭 Re-estimate Wind Direction", 
+                              help="Recalculate wind direction based on ONLY currently selected segments", 
+                              key="reestimate_wind",
+                              use_container_width=True):
+                        
+                        if segment_count >= 3:  # Need at least 3 segments for reliable estimation
+                            # Import here to avoid scope issues
+                            from utils.analysis import estimate_wind_direction, estimate_wind_direction_from_upwind_tacks
+                            
+                            # First try the new upwind tack analysis method
+                            # This requires angles to be calculated with some initial wind direction 
+                            # We use the current wind direction for this initial calculation
+                            current_wind = st.session_state.wind_direction
+                            
+                            # Calculate angles to wind using current wind direction
+                            temp_stretches = analyze_wind_angles(estimation_stretches, current_wind)
+                            
+                            # Try to estimate using the new tack-based method first
+                            # Pass the suspicious angle threshold from user settings
+                            new_wind_estimate = estimate_wind_direction_from_upwind_tacks(
+                                temp_stretches,
+                                suspicious_angle_threshold=suspicious_angle_threshold
+                            )
+                            
+                            # If that fails, fall back to the regular method
+                            if new_wind_estimate is None:
+                                new_wind_estimate = estimate_wind_direction(estimation_stretches, use_simple_method=True)
+                                method_used = "standard clustering"
+                            else:
+                                method_used = "upwind tack analysis"
+                            
+                            if new_wind_estimate is not None:
+                                st.session_state.estimated_wind = new_wind_estimate
+                                st.session_state.wind_direction = new_wind_estimate
+                                st.success(f"✅ Wind direction re-estimated: {new_wind_estimate:.1f}° based on your {segment_count} selected segments (using {method_used})")
+                                
+                                # Also recalculate angles with new wind direction
+                                # Use the global analyze_wind_angles function
+                                if st.session_state.track_stretches is not None:
+                                    recalculated = analyze_wind_angles(stretches, new_wind_estimate)
+                                    st.session_state.track_stretches = recalculated
+                                
+                                # Force a rerun to update all calculations with new wind direction
+                                st.rerun()
+                            else:
+                                st.error("⚠️ Couldn't estimate wind direction from selected segments")
+                        else:
+                            st.warning(f"⚠️ Need at least 3 segments to estimate wind direction. You have {segment_count} selected.")
                     
                     # Apply immediately when button is clicked
+                    # Make sure we trigger a complete recalculation
                     if apply_button:
-                        st.experimental_rerun()
+                        # Force recalculation with current wind direction before rerun
+                        # This is the key fix to ensure filters and wind direction changes affect all visualizations
+                        if st.session_state.track_stretches is not None:
+                            # Get the base stretches before wind angle calculation
+                            base_stretches = st.session_state.track_stretches.copy()
+                            # Use the global analyze_wind_angles function
+                            # Recalculate wind angles with current wind direction
+                            recalculated_stretches = analyze_wind_angles(base_stretches, wind_direction)
+                            # Update session state with fresh calculation
+                            st.session_state.track_stretches = recalculated_stretches
+                        
+                        # Now trigger a full page rerun with the updated data
+                        st.rerun()
                     
                     # PERFORMANCE ANALYSIS - Best Angles Section
                     st.subheader("📊 Performance Analysis")
@@ -780,7 +903,7 @@ def single_track_analysis():
                             )
                         
                         st.dataframe(filtered_display_df[display_cols], use_container_width=True, height=200)
-                        st.caption("⚠️ indicates suspicious angles (< 15°)")
+                        st.caption(f"⚠️ indicates suspicious angles (< {suspicious_angle_threshold}°)")
                     else:
                         st.warning("No segments selected. Please use the filters to select segments.")
                 
@@ -848,7 +971,7 @@ def single_track_analysis():
                                 segment_count += 1
                     
                     if apply_selection:
-                        st.experimental_rerun()
+                        st.rerun()
                         
                 # Add average angles at the bottom after all tabs
                 if ('selected_segments' in st.session_state and 

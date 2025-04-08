@@ -151,6 +151,159 @@ def analyze_wind_angles(stretches, wind_direction):
     
     return result
 
+def estimate_wind_direction_from_upwind_tacks(stretches, suspicious_angle_threshold=20):
+    """
+    Estimate wind direction based on best upwind tacks on port and starboard.
+    
+    This method:
+    1. Selects upwind segments (angle_to_wind < 90)
+    2. Filters out suspicious angles (typically <20° to wind)
+    3. Groups segments by tack (port/starboard)
+    4. For each tack with ≥3 segments, checks if best 3 have a spread <15°
+       a. If yes, averages those 3 angles
+       b. If no, uses the single best angle
+    5. If we have both port and starboard best angles, calculates the wind 
+       direction based on the bisector
+    
+    Parameters:
+    - stretches: DataFrame of consistent sailing segments with angle_to_wind 
+                 and tack information already calculated
+    - suspicious_angle_threshold: Angles closer to wind than this are considered
+                                 suspicious and excluded (default: 20°)
+    
+    Returns:
+    - Estimated wind direction or None if insufficient data
+    """
+    # Must have both angle_to_wind and tack columns
+    if stretches.empty or 'angle_to_wind' not in stretches.columns or 'tack' not in stretches.columns:
+        return None
+    
+    # Log the filtering process
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    # Get segments that are upwind (angle < 90) but not suspicious
+    upwind = stretches[
+        (stretches['angle_to_wind'] < 90) & 
+        (stretches['angle_to_wind'] >= suspicious_angle_threshold)
+    ].copy()
+    
+    logger.info(f"Filtering angles: using only {len(upwind)}/{len(stretches[stretches['angle_to_wind'] < 90])} " +
+               f"upwind segments after removing angles < {suspicious_angle_threshold}°")
+    
+    # Need at least 3 upwind segments total
+    if len(upwind) < 3:
+        return None
+    
+    # Group by tack
+    port_upwind = upwind[upwind['tack'] == 'Port']
+    starboard_upwind = upwind[upwind['tack'] == 'Starboard']
+    
+    # Get current wind direction (needed for calculations)
+    current_wind = stretches['wind_direction'].iloc[0] if 'wind_direction' in stretches.columns else None
+    
+    # Calculate best angle for port tack
+    port_best_angle = None
+    port_best_bearing = None
+    if len(port_upwind) >= 3:
+        # Sort by angle to wind (ascending)
+        port_sorted = port_upwind.sort_values('angle_to_wind')
+        # Get the 3 best angles
+        best_3_port = port_sorted.iloc[:3]
+        # Calculate the spread
+        port_spread = best_3_port['angle_to_wind'].max() - best_3_port['angle_to_wind'].min()
+        
+        if port_spread < 15:  # Low spread, can average
+            port_best_angle = best_3_port['angle_to_wind'].mean()
+            # Average the bearings (need special handling for circular mean)
+            bearings = best_3_port['bearing'].values
+            x = np.cos(np.radians(bearings))
+            y = np.sin(np.radians(bearings))
+            port_best_bearing = (np.degrees(np.arctan2(np.mean(y), np.mean(x))) + 360) % 360
+        else:  # High spread, use best single angle
+            port_best_angle = port_sorted['angle_to_wind'].iloc[0]
+            port_best_bearing = port_sorted['bearing'].iloc[0]
+    elif len(port_upwind) > 0:
+        # Use the best available if fewer than 3
+        port_sorted = port_upwind.sort_values('angle_to_wind')
+        port_best_angle = port_sorted['angle_to_wind'].iloc[0]
+        port_best_bearing = port_sorted['bearing'].iloc[0]
+        
+    # Calculate best angle for starboard tack
+    starboard_best_angle = None
+    starboard_best_bearing = None
+    if len(starboard_upwind) >= 3:
+        # Sort by angle to wind (ascending)
+        starboard_sorted = starboard_upwind.sort_values('angle_to_wind')
+        # Get the 3 best angles
+        best_3_starboard = starboard_sorted.iloc[:3]
+        # Calculate the spread
+        starboard_spread = best_3_starboard['angle_to_wind'].max() - best_3_starboard['angle_to_wind'].min()
+        
+        if starboard_spread < 15:  # Low spread, can average
+            starboard_best_angle = best_3_starboard['angle_to_wind'].mean()
+            # Average the bearings (need special handling for circular mean)
+            bearings = best_3_starboard['bearing'].values
+            x = np.cos(np.radians(bearings))
+            y = np.sin(np.radians(bearings))
+            starboard_best_bearing = (np.degrees(np.arctan2(np.mean(y), np.mean(x))) + 360) % 360
+        else:  # High spread, use best single angle
+            starboard_best_angle = starboard_sorted['angle_to_wind'].iloc[0]
+            starboard_best_bearing = starboard_sorted['bearing'].iloc[0]
+    elif len(starboard_upwind) > 0:
+        # Use the best available if fewer than 3
+        starboard_sorted = starboard_upwind.sort_values('angle_to_wind')
+        starboard_best_angle = starboard_sorted['angle_to_wind'].iloc[0]
+        starboard_best_bearing = starboard_sorted['bearing'].iloc[0]
+    
+    # Log what we found
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"Best port angle: {port_best_angle}, bearing: {port_best_bearing}")
+    logger.info(f"Best starboard angle: {starboard_best_angle}, bearing: {starboard_best_bearing}")
+    
+    # Need at least one tack with a valid angle
+    if port_best_angle is None and starboard_best_angle is None:
+        return None
+        
+    # If we have both tacks, calculate wind based on the bisector
+    if port_best_bearing is not None and starboard_best_bearing is not None:
+        # Calculate the bisector angle between the upwind tacks
+        # Handle angle wrapping around 0/360
+        if abs(port_best_bearing - starboard_best_bearing) > 180:
+            if port_best_bearing < starboard_best_bearing:
+                port_best_bearing += 360
+            else:
+                starboard_best_bearing += 360
+                
+        bisector = (port_best_bearing + starboard_best_bearing) / 2
+        if bisector >= 360:
+            bisector -= 360
+            
+        # The wind comes from the bisector
+        estimated_wind = bisector
+        logger.info(f"Estimated wind from tack bisector: {estimated_wind:.1f}°")
+        
+        return estimated_wind
+    
+    # If we only have one tack, use the current wind direction estimate as reference
+    elif port_best_bearing is not None and current_wind is not None:
+        # Adjust based on the port tack
+        port_angle_to_wind = port_best_angle  # already in degrees
+        estimated_wind = (port_best_bearing + port_angle_to_wind) % 360
+        logger.info(f"Estimated wind from port tack: {estimated_wind:.1f}°")
+        return estimated_wind
+        
+    elif starboard_best_bearing is not None and current_wind is not None:
+        # Adjust based on the starboard tack
+        starboard_angle_to_wind = starboard_best_angle  # already in degrees
+        estimated_wind = (starboard_best_bearing - starboard_angle_to_wind) % 360
+        logger.info(f"Estimated wind from starboard tack: {estimated_wind:.1f}°")
+        return estimated_wind
+        
+    # Fallback to current wind if we can't calculate a new one
+    return current_wind
+
 def estimate_wind_direction(stretches, use_simple_method=True):
     """
     Estimate wind direction based on sailing patterns.
@@ -159,6 +312,7 @@ def estimate_wind_direction(stretches, use_simple_method=True):
     1. Clustering bearings to find opposite tacks
     2. Assuming most sailing is across the wind (90° from wind)
     3. Finding the most frequent sailing directions
+    4. Analyzing best upwind tacks (if available)
     
     Parameters:
     - stretches: DataFrame of consistent sailing segments
@@ -248,10 +402,26 @@ def estimate_wind_direction(stretches, use_simple_method=True):
     # If the clusters are close to equal, consider both
     min_points_ratio = min(cluster_counts_wind) / max(cluster_counts_wind)
     
-    # If using simple method, just return method2_wind which is more reliable
+    # Method 3 (NEW): Use the upwind tack analysis if we have angle_to_wind data
+    # This is potentially more accurate for measuring true wind direction
+    method3_wind = None
+    if 'angle_to_wind' in stretches.columns and 'tack' in stretches.columns:
+        # Calculate a temporary result to get angle_to_wind and tack data
+        temp_result = analyze_wind_angles(stretches, method2_wind)
+        method3_wind = estimate_wind_direction_from_upwind_tacks(temp_result)
+        
+        if method3_wind is not None:
+            logger = logging.getLogger(__name__)
+            logger.info(f"Upwind tack method estimated wind direction: {method3_wind:.1f}°")
+    
+    # If using simple method and we have upwind tack data (preferred approach)
+    if use_simple_method and method3_wind is not None:
+        # Method 3 is most reliable when we have good upwind data
+        return method3_wind
+    
+    # If using simple method, fall back to method2_wind which is the next most reliable
     # for real-world sailing tracks (directly clusters possible wind directions)
     if use_simple_method:
-        # Simple method works best for real data
         return method2_wind
     
     # Complex logic for combining the methods - works better for synthetic data

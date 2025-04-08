@@ -727,7 +727,7 @@ def st_main():
                 st.session_state.gear2_name = None
                 st.session_state.gear2_stretches = None
                 st.session_state.gear2_wind = None
-                st.experimental_rerun()
+                st.rerun()
         
         # Wind direction auto-detection
         st.subheader("Wind Direction")
@@ -791,7 +791,7 @@ def st_main():
                 st.session_state.gear1_name = None
                 st.session_state.gear1_stretches = None
                 st.session_state.gear1_wind = None
-                st.experimental_rerun()
+                st.rerun()
     
     with col2:
         st.subheader("Gear 2")
@@ -811,7 +811,7 @@ def st_main():
                 st.session_state.gear2_name = None
                 st.session_state.gear2_stretches = None
                 st.session_state.gear2_wind = None
-                st.experimental_rerun()
+                st.rerun()
     
     # Process files and create comparison
     # Check if we have new files to process or use existing data from session state
