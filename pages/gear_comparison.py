@@ -52,17 +52,33 @@ def generate_ai_comparison_analysis(gear_sessions):
     formatted_data = format_gear_data_for_ai(gear_sessions)
     
     # Create the prompt for Claude
-    prompt = f"""As a wingfoil performance analyst, I'm reviewing the following gear comparison data.
+    prompt = f"""As an expert wingfoil performance analyst, I'm reviewing the following gear comparison data.
 Please provide a detailed analysis highlighting key performance differences between the gear setups.
 
+WINGFOIL TERMINOLOGY AND PERFORMANCE FACTORS:
+- Wing size: Measured in meters (e.g., "3m Rocket" means a 3-meter Rocket wing). Smaller wings (e.g., 3m) are for stronger winds, larger wings (e.g., 5m+) for lighter winds.
+- Wind strength: Measured in knots (e.g., "18kn" or "20 knots"). Higher wind generally allows better performance with appropriately sized wings.
+- Wing types/models: Wing brand and model names in session titles (e.g., "Rocket", "Unit", "Slick") indicate different wing designs and characteristics.
+- Pointing Power: Lower values (closer to wind direction) indicate better upwind performance.
+- Session naming patterns: Users often title their sessions with gear and conditions info, like "3m Rocket 20kn" (meaning a 3m Rocket wing in 20 knot winds).
+
+IMPORTANT ANALYSIS GUIDANCE:
+- Wing size and wind speed are typically the most influential factors for performance differences.
+- The same wing (e.g., "3m Rocket") used in different wind conditions will show different performance characteristics.
+- Foil choice has moderate impact on performance, especially for upwind capabilities and speed.
+- Board choice generally has less impact on performance metrics than wing or foil.
+- When comparing the same equipment in different wind conditions, focus on how the wind affects the performance.
+- When comparing different wings or foils, note their specific design advantages.
+
 You should include:
-1. Overall performance comparison
-2. Upwind capabilities analysis (pointing angles and speeds)
+1. Overall performance comparison with clear identification of which setup performed better and why
+2. Upwind capabilities analysis (pointing angles and speeds) 
 3. Downwind capabilities analysis
-4. Specific gear strengths and weaknesses
-5. Recommendations based on conditions
+4. Specific gear strengths and weaknesses based on the data
+5. Practical recommendations for when to use each setup based on conditions
 
 Your analysis should be specific, data-driven, and actionable for wingfoilers looking to improve their gear selection.
+Use the session names to extract important information about gear and conditions, even if not explicitly provided in the specifications.
 
 Here's the gear comparison data:
 {formatted_data}
@@ -74,9 +90,9 @@ Please provide a concise, well-structured analysis with clear sections and heade
         client = get_anthropic_client()
         
         response = client.messages.create(
-            model="claude-3-haiku-20240307",
-            max_tokens=1500,
-            temperature=0.3,
+            model="claude-3-opus-20240229",  # Use Opus for more comprehensive analysis
+            max_tokens=2000,
+            temperature=0.2,  # Lower temperature for more consistent results
             messages=[
                 {"role": "user", "content": prompt}
             ]
@@ -90,6 +106,49 @@ Please provide a concise, well-structured analysis with clear sections and heade
         logger.error(f"Error generating AI analysis: {str(e)}")
         raise e
 
+def generate_session_name(wing, foil, wind_speed, original_name=None, existing_names=None):
+    """Generate a meaningful session name based on gear and wind information.
+    
+    Args:
+        wing: Wing information (model/size)
+        foil: Foil information
+        wind_speed: Wind speed in knots
+        original_name: Original name to use as fallback
+        existing_names: List of existing names to avoid duplicates
+        
+    Returns:
+        str: Generated session name
+    """
+    if existing_names is None:
+        existing_names = []
+    
+    # Try to create name from wing and wind speed
+    if wing and wind_speed > 0:
+        session_name = f"{wing} {wind_speed}kn"
+    elif wing:
+        session_name = wing
+    elif wind_speed > 0:
+        session_name = f"{wind_speed}kn {original_name or 'Session'}"
+    else:
+        # Fallback to original name or default
+        session_name = original_name or "Unnamed Session"
+    
+    # Check if this name already exists
+    if session_name in existing_names:
+        # If foil info is available, add it to differentiate
+        if foil:
+            session_name = f"{session_name} - {foil}"
+        
+        # If still a duplicate, add an incremental number
+        base_name = session_name
+        counter = 1
+        while session_name in existing_names:
+            session_name = f"{base_name}_{counter}"
+            counter += 1
+    
+    return session_name
+
+
 def format_gear_data_for_ai(gear_sessions):
     """Format gear comparison data for Claude.
     
@@ -101,25 +160,62 @@ def format_gear_data_for_ai(gear_sessions):
     """
     result = []
     
-    # Add gear specifications
+    # Add gear specifications with more comprehensive analysis of session names
     result.append("## Gear Specifications")
     for i, session in enumerate(gear_sessions, 1):
-        result.append(f"\nGear Setup {i}: {session['name']}")
+        # Extract session name and handle potential gear info embedded in name
+        session_name = session['name']
+        result.append(f"\nGear Setup {i}: {session_name}")
         
+        # Extract potential wing size/type from session name if not explicitly provided
+        name_info = []
+        if "m " in session_name.lower() or "m_" in session_name.lower():
+            name_info.append("- Note: Session name may contain wing size information")
+        
+        # Check for wind speed in name
+        if any(x in session_name.lower() for x in ["kn", "knot", "kts"]):
+            name_info.append("- Note: Session name may contain wind speed information")
+            
+        # Add interpreted name info if found
+        if name_info:
+            result.append("- Session name analysis: Session name may contain gear/wind information")
+        
+        # Add explicit gear info when available
         if session.get('board'):
             result.append(f"- Board: {session['board']}")
         if session.get('foil'):
             result.append(f"- Foil: {session['foil']}")
         if session.get('wing'):
             result.append(f"- Wing: {session['wing']}")
+        else:
+            # Try to infer wing info from session name
+            import re
+            wing_size_match = re.search(r'(\d+\.?\d*)m', session_name)
+            wing_type_match = re.search(r'\b(rocket|unit|slick|glide|echo|drifter|freewing)\b', session_name.lower())
+            
+            if wing_size_match:
+                size = wing_size_match.group(1)
+                wing_type = wing_type_match.group(1).capitalize() if wing_type_match else "unknown model"
+                result.append(f"- Wing (inferred from name): ~{size}m {wing_type}")
+        
+        # Wind information
         if session.get('wind_speed') and session['wind_speed'] > 0:
             result.append(f"- Wind Speed: {session['wind_speed']} knots")
+        else:
+            # Try to infer wind speed from session name
+            wind_match = re.search(r'(\d+)(?:\s*)(kn|knots?|kts?)', session_name.lower())
+            if wind_match:
+                wind_speed = wind_match.group(1)
+                result.append(f"- Wind Speed (inferred from name): ~{wind_speed} knots")
+                
         if session.get('wind_range'):
             result.append(f"- Wind Range: {session['wind_range']}")
         if session.get('conditions'):
             result.append(f"- Conditions: {session['conditions']}")
         if session.get('location'):
             result.append(f"- Location: {session['location']}")
+        if session.get('date'):
+            result.append(f"- Date: {session['date']}")
     
     # Add performance metrics
     result.append("\n## Performance Metrics")
@@ -129,7 +225,6 @@ def format_gear_data_for_ai(gear_sessions):
     metrics_table.append("|" + "---|" * (len(gear_sessions) + 1))
     
     # Extract and format key metrics
-    metrics = []
     
     # Overall max speed
     speeds = []
@@ -168,9 +263,12 @@ def format_gear_data_for_ai(gear_sessions):
                 stretches = pd.DataFrame(stretches)
                 
             # Calculate pointing power
-            pointing_power, _, _ = calculate_pointing_power(stretches)
+            pointing_power, port_best, starboard_best = calculate_pointing_power(stretches)
             if pointing_power is not None:
-                upwind_angles.append(f"{pointing_power:.1f}°")
+                angle_details = f"{pointing_power:.1f}°"
+                if port_best is not None and starboard_best is not None:
+                    angle_details += f" (P:{port_best:.1f}°, S:{starboard_best:.1f}°)"
+                upwind_angles.append(angle_details)
             else:
                 upwind_angles.append("N/A")
         else:
@@ -204,9 +302,9 @@ def format_gear_data_for_ai(gear_sessions):
                 stretches = pd.DataFrame(stretches)
                 
             # Calculate clustered upwind speed
-            clustered_avg_speed, _, _, _ = calculate_clustered_upwind_speed(stretches)
+            clustered_avg_speed, clustered_max_speed, _, _ = calculate_clustered_upwind_speed(stretches)
             if clustered_avg_speed is not None:
-                upwind_speeds.append(f"{clustered_avg_speed:.1f} knots")
+                upwind_speeds.append(f"{clustered_avg_speed:.1f} knots (max: {clustered_max_speed:.1f})")
             else:
                 upwind_speeds.append("N/A")
         else:
@@ -224,7 +322,7 @@ def format_gear_data_for_ai(gear_sessions):
             # Get downwind data
             downwind = stretches[stretches['angle_to_wind'] >= 90]
             if not downwind.empty:
-                downwind_speeds.append(f"{downwind['speed'].mean():.1f} knots")
+                downwind_speeds.append(f"{downwind['speed'].mean():.1f} knots (max: {downwind['speed'].max():.1f})")
             else:
                 downwind_speeds.append("N/A")
         else:
@@ -239,6 +337,13 @@ def format_gear_data_for_ai(gear_sessions):
     result.append("- Pointing Power: Average of best pointing angles on port and starboard tacks. Lower is better (closer to wind).")
     result.append("- Upwind Speed: Average speed calculated from the cluster of best pointing segments.")
     result.append("- Downwind Speed: Average speed on all downwind segments (angle to wind >= 90°).")
+    result.append("- P: Port tack, S: Starboard tack")
+    
+    # Add environmental factors that might impact comparison
+    result.append("\n## Environmental Context")
+    result.append("- Wind speed and direction consistency affect performance")
+    result.append("- Water conditions (chop, swell) affect upwind/downwind capabilities")
+    result.append("- Rider skill and technique are important factors in performance metrics")
     
     return "\n".join(result)
 
@@ -1203,23 +1308,56 @@ def process_bulk_upload(uploaded_files):
             if stretches.empty:
                 continue
             
-            # Create session data
+            # Try to extract wing size/type and wind speed from filename
+            import re
+            wing_info = ""
+            wind_speed_value = 0
+            
+            # Extract wing size (e.g., "3m") and model (e.g., "rocket", "unit", etc.)
+            wing_size_match = re.search(r'(\d+\.?\d*)m', track_name.lower())
+            wing_model_match = re.search(r'\b(rocket|unit|slick|glide|echo|drifter|freewing)\b', track_name.lower())
+            
+            if wing_size_match:
+                size = wing_size_match.group(1)
+                model = wing_model_match.group(1).capitalize() if wing_model_match else ""
+                wing_info = f"{size}m {model}".strip()
+            
+            # Extract wind speed (e.g., "18kn", "20_knots")
+            wind_match = re.search(r'(\d+)\s*(?:kn|knots?|kts?)', track_name.lower())
+            if wind_match:
+                wind_speed_value = int(wind_match.group(1))
+            
+            # Create session data with extracted information
             session_data = {
                 'id': len(st.session_state.gear_comparison_data) + 1,
-                'name': track_name,
+                'name': track_name,  # Will be overridden if we can generate a better name
                 'date': None,
                 'wind_direction': estimated_wind,
-                'wind_speed': 0,
+                'wind_speed': wind_speed_value,
                 'wind_range': '',
                 'board': '',
                 'foil': '',
-                'wing': '',
+                'wing': wing_info,
                 'location': '',
                 'conditions': '',
                 'notes': filtered_note,
                 'metrics': metrics,
                 'stretches': stretches
             }
+            
+            # Generate a more meaningful name if possible
+            existing_names = [s['name'] for s in st.session_state.gear_comparison_data]
+            better_name = generate_session_name(
+                wing=wing_info,
+                foil='',
+                wind_speed=wind_speed_value,
+                original_name=track_name,
+                existing_names=existing_names
+            )
+            
+            # Use the better name if we could generate one
+            if better_name != track_name:
+                session_data['name'] = better_name
             
             # Add to gear comparison data
             st.session_state.gear_comparison_data.append(session_data)
@@ -1326,60 +1464,70 @@ def edit_session(session_data):
     
     # Edit form
     with st.form("edit_session_form"):
-        # Session name
-        session_name = st.text_input("Session Name", value=session_data.get('name', ''))
-        
-        # Date picker
-        try:
-            current_date = datetime.fromisoformat(session_data.get('date', '')) if session_data.get('date') else None
-        except:
-            current_date = None
-            
-        session_date = st.date_input("Session Date", value=current_date)
-        
-        # Gear info
+        # Main, most important gear info - focus on the essentials
+        st.markdown("### Essential Gear Info")
         col1, col2 = st.columns(2)
         with col1:
-            board = st.text_input("Board", value=session_data.get('board', ''), placeholder="E.g., Axis S-Series 5'2\"")
-            foil = st.text_input("Foil", value=session_data.get('foil', ''), placeholder="E.g., Armstrong CF2400")
+            wing = st.text_input("Wing", 
+                                value=session_data.get('wing', ''), 
+                                placeholder="E.g., Duotone Unit 5m")
+            foil = st.text_input("Foil", 
+                                value=session_data.get('foil', ''), 
+                                placeholder="E.g., Armstrong CF2400")
         
         with col2:
-            wing = st.text_input("Wing", value=session_data.get('wing', ''), placeholder="E.g., Duotone Unit 5m")
             wind_speed = st.number_input(
                 "Avg Wind Speed (knots)", 
                 min_value=0, max_value=50, 
                 value=session_data.get('wind_speed', 0) if session_data.get('wind_speed') else 0, 
                 step=1
             )
+            auto_name = st.checkbox("Auto-generate session name", value=True)
         
-        # Wind and location info
-        col1, col2 = st.columns(2)
-        with col1:
-            wind_range = st.text_input(
-                "Wind Range", 
-                value=session_data.get('wind_range', ''), 
-                placeholder="E.g., 15-20 knots"
-            )
-            conditions = st.text_input(
-                "Conditions", 
-                value=session_data.get('conditions', ''), 
-                placeholder="E.g., Choppy water, gusty"
+        # Less important details in an expander
+        with st.expander("More Details (Optional)"):
+            # Board info
+            board = st.text_input("Board", 
+                                value=session_data.get('board', ''), 
+                                placeholder="E.g., Axis S-Series 5'2\"")
+            
+            # Wind and location info
+            col1, col2 = st.columns(2)
+            with col1:
+                wind_range = st.text_input(
+                    "Wind Range", 
+                    value=session_data.get('wind_range', ''), 
+                    placeholder="E.g., 15-20 knots"
+                )
+                conditions = st.text_input(
+                    "Conditions", 
+                    value=session_data.get('conditions', ''), 
+                    placeholder="E.g., Choppy water, gusty"
+                )
+            
+            with col2:
+                location = st.text_input(
+                    "Location", 
+                    value=session_data.get('location', ''),
+                    placeholder="E.g., San Francisco Bay"
+                )
+                try:
+                    current_date = datetime.fromisoformat(session_data.get('date', '')) if session_data.get('date') else None
+                except:
+                    current_date = None
+                    
+                session_date = st.date_input("Session Date", value=current_date)
+            
+            # Notes
+            notes = st.text_area(
+                "Notes", 
+                value=session_data.get('notes', ''),
+                placeholder="Any additional info about this session"
             )
         
-        with col2:
-            location = st.text_input(
-                "Location", 
-                value=session_data.get('location', ''),
-                placeholder="E.g., San Francisco Bay"
-            )
-            # We don't allow editing the wind direction - it's calculated from the data
-        
-        # Notes
-        notes = st.text_area(
-            "Notes", 
-            value=session_data.get('notes', ''),
-            placeholder="Any additional info about this session"
-        )
+        # Session name - shown outside expander but after essential info
+        if not auto_name:
+            session_name = st.text_input("Session Name", value=session_data.get('name', ''))
         
         # Form submission
         col1, col2 = st.columns([1, 1])
@@ -1389,6 +1537,20 @@ def edit_session(session_data):
             submit = st.form_submit_button("Save Changes", type="primary")
         
         if submit:
+            # Generate automatic session name if checked
+            if auto_name:
+                # Get existing names excluding the current session
+                existing_names = [s['name'] for s in st.session_state.gear_comparison_data if s['id'] != session_data['id']]
+                
+                # Use our helper function to generate a meaningful name
+                session_name = generate_session_name(
+                    wing=wing,
+                    foil=foil,
+                    wind_speed=wind_speed,
+                    original_name=session_data.get('name'),
+                    existing_names=existing_names
+                )
+            
             # Update session data
             updated_session = session_data.copy()
             updated_session.update({

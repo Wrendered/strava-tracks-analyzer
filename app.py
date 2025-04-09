@@ -167,34 +167,41 @@ def single_track_analysis():
                 else:
                     current_stretches = pd.DataFrame()
             
-            # Session name (default to track name)
-            session_name = st.text_input(
-                "Session Name", 
-                value=st.session_state.track_name if st.session_state.track_name else "Unnamed Session"
-            )
-            
-            # Gear info
+            # Main, most important gear info - focus on the essentials
+            st.markdown("### Essential Gear Info")
             col1, col2 = st.columns(2)
             with col1:
-                board = st.text_input("Board", placeholder="E.g., Axis S-Series 5'2\"")
+                wing = st.text_input("Wing", placeholder="E.g., Duotone Unit 5m")
                 foil = st.text_input("Foil", placeholder="E.g., Armstrong CF2400")
             
             with col2:
-                wing = st.text_input("Wing", placeholder="E.g., Duotone Unit 5m")
                 wind_speed = st.number_input("Avg Wind Speed (knots)", min_value=0, max_value=50, value=0, step=1)
+                auto_name = st.checkbox("Auto-generate session name", value=True)
             
-            # Wind info
-            col1, col2 = st.columns(2)
-            with col1:
-                wind_range = st.text_input("Wind Range", placeholder="E.g., 15-20 knots")
-                conditions = st.text_input("Conditions", placeholder="E.g., Choppy water, gusty")
-            
-            with col2:
-                location = st.text_input("Location", placeholder="E.g., San Francisco Bay")
-                session_date = st.date_input("Session Date", value=None)
-            
-            # Notes
-            notes = st.text_area("Notes", placeholder="Any additional info about this session")
+            # Less important details in an expander
+            with st.expander("More Details (Optional)"):
+                # Board info
+                board = st.text_input("Board", placeholder="E.g., Axis S-Series 5'2\"")
+                
+                # Wind info
+                col1, col2 = st.columns(2)
+                with col1:
+                    wind_range = st.text_input("Wind Range", placeholder="E.g., 15-20 knots")
+                    conditions = st.text_input("Conditions", placeholder="E.g., Choppy water, gusty")
+                
+                with col2:
+                    location = st.text_input("Location", placeholder="E.g., San Francisco Bay")
+                    session_date = st.date_input("Session Date", value=None)
+                
+                # Notes
+                notes = st.text_area("Notes", placeholder="Any additional info about this session")
+                
+                # Manual session name override
+                if not auto_name:
+                    session_name = st.text_input(
+                        "Custom Session Name", 
+                        value=st.session_state.track_name if st.session_state.track_name else "Unnamed Session"
+                    )
             
             # Form submission
             col1, col2 = st.columns([1, 1])
@@ -204,6 +211,20 @@ def single_track_analysis():
                 submit = st.form_submit_button("Save to Comparison", type="primary")
             
             if submit:
+                # Import the name generation function from the gear comparison module
+                from pages.gear_comparison import generate_session_name
+                
+                # Generate automatic session name if checked
+                if auto_name:
+                    existing_names = [s['name'] for s in st.session_state.gear_comparison_data]
+                    session_name = generate_session_name(
+                        wing=wing,
+                        foil=foil,
+                        wind_speed=wind_speed,
+                        original_name=st.session_state.track_name,
+                        existing_names=existing_names
+                    )
+                
                 # Create export data package
                 export_data = {
                     'id': len(st.session_state.gear_comparison_data) + 1,
