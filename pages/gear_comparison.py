@@ -1844,12 +1844,7 @@ def run_multi_comparison(selected_sessions):
             st.warning(f"Session '{session['name']}' has no segment data after filtering.")
             return
     
-    # Plot the comparative polar diagram
-    st.write("### Polar Performance Comparison")
-    fig = create_combined_polars(selected_sessions)
-    st.pyplot(fig)
-    
-    # Show gear specs comparison
+    # Show gear specs comparison first (for better screenshots)
     st.write("### Gear Specifications")
     
     # Create comparison table with all gear specs
@@ -1862,13 +1857,17 @@ def run_multi_comparison(selected_sessions):
         for session in selected_sessions:
             val = session.get(field, 'N/A')
             
+            # Check if value exists and is not empty
+            if val != 'N/A' and val != '' and val is not None:
+                has_value = True
+            else:
+                val = 'N/A'
+                
             # Format wind_speed with "knots" if available
             if field == 'wind_speed' and val != 'N/A' and val > 0:
                 val = f"{val} knots"
                 
             field_values.append(val)
-            if val != 'N/A':
-                has_value = True
         
         # Skip if no session has a value for this field
         if not has_value:
@@ -1886,6 +1885,13 @@ def run_multi_comparison(selected_sessions):
             columns=column_names
         )
         st.table(gear_df)
+    else:
+        st.info("No gear specifications available for comparison.")
+        
+    # Plot the comparative polar diagram
+    st.write("### Polar Performance Comparison")
+    fig = create_combined_polars(selected_sessions)
+    st.pyplot(fig)
     
     # Create comparison tables for performance metrics
     st.write("### Performance Comparison")
@@ -1923,12 +1929,6 @@ def run_multi_comparison(selected_sessions):
     # Create DataFrame and display
     metrics_df = pd.DataFrame(metrics_data)
     
-    # Show tooltip separately instead of in the dataframe parameters
-    st.info("""
-    **Pointing Power**: Average of best port/starboard pointing angles. Lower is better (closer to wind).
-    **Clustered Upwind Speed**: Average speed calculated from the cluster of best pointing segments.
-    """)
-    
     # Display dataframe - check if hide_index is supported in your Streamlit version
     try:
         # For newer versions of Streamlit
@@ -1936,6 +1936,12 @@ def run_multi_comparison(selected_sessions):
     except:
         # Fallback for older versions
         st.dataframe(metrics_df, use_container_width=True)
+        
+    # Show metrics explanation after the table
+    st.info("""
+    **Pointing Power**: Average of best port/starboard pointing angles. Lower is better (closer to wind).
+    **Clustered Upwind Speed**: Average speed calculated from the cluster of best pointing segments.
+    """)
     
     # Explain the clustering calculation in an expander
     with st.expander("About Upwind Speed Calculation"):
