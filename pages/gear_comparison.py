@@ -1736,7 +1736,19 @@ def select_sessions_sidebar(gear_data_list):
         # Default to selecting the first two sessions
         st.session_state.selected_comparison_sessions = [sorted_sessions[0]['id'], sorted_sessions[1]['id']] if len(sorted_sessions) >= 2 else []
     
+    # Initialize upwind_only filter if not already there
+    if 'upwind_only_filter' not in st.session_state:
+        st.session_state.upwind_only_filter = False
+    
     st.sidebar.markdown("### Select Sessions to Compare")
+    
+    # Add upwind filter at the top
+    st.sidebar.markdown("### Filter Options")
+    upwind_only = st.sidebar.checkbox("Upwind Only", value=st.session_state.upwind_only_filter, 
+                                    help="Show only upwind segments (angle to wind < 90°)")
+    
+    # Update session state with filter selection
+    st.session_state.upwind_only_filter = upwind_only
     
     # Create a checkbox for each session
     selected_session_ids = []
@@ -1771,6 +1783,10 @@ def run_multi_comparison(selected_sessions):
         names = [s['name'] for s in selected_sessions]
         header_text = f"Multi-Gear Comparison: {', '.join(names[:-1])} and {names[-1]}"
     
+    # Add filter indicator to header if active
+    if st.session_state.upwind_only_filter:
+        header_text += " (Upwind Only)"
+    
     st.header(header_text)
     
     # Process stretches data for all sessions
@@ -1779,11 +1795,18 @@ def run_multi_comparison(selected_sessions):
         
         # Convert from dict to DataFrame if needed (due to JSON serialization)
         if isinstance(stretches, dict):
-            session['stretches'] = pd.DataFrame(stretches)
+            stretches = pd.DataFrame(stretches)
+            
+        # Apply upwind filter if activated
+        if st.session_state.upwind_only_filter:
+            stretches = stretches[stretches['angle_to_wind'] < 90]
+            
+        # Update the session with filtered data
+        session['stretches'] = stretches
             
         # Ensure we have data
-        if session['stretches'] is None or session['stretches'].empty:
-            st.warning(f"Session '{session['name']}' has no segment data.")
+        if stretches is None or stretches.empty:
+            st.warning(f"Session '{session['name']}' has no segment data after filtering.")
             return
     
     # Plot the comparative polar diagram
