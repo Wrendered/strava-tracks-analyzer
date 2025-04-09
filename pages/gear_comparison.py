@@ -1913,17 +1913,21 @@ def run_multi_comparison(selected_sessions):
                             if fig:
                                 st.pyplot(fig)
     
+    # AI Performance Analysis section is temporarily hidden as it needs more work
+    # Uncomment when ready to re-enable
+    
+    """
     # AI analysis section with Claude integration
     st.write("### AI Performance Analysis")
     
     # API key input - only show if we don't have a key in environment
     if not os.environ.get("ANTHROPIC_API_KEY") and "anthropic_api_key" not in st.session_state:
         with st.expander("🔑 Set Anthropic API Key", expanded=True):
-            st.markdown("""
+            st.markdown('''
             To use the AI analysis feature, you need an Anthropic API key. 
             
             You can get one at [anthropic.com](https://www.anthropic.com/).
-            """)
+            ''')
             
             api_key = st.text_input(
                 "Anthropic API Key",
@@ -1958,6 +1962,7 @@ def run_multi_comparison(selected_sessions):
                     st.info("Please make sure your Anthropic API key is valid.")
     else:
         st.info("Set your Anthropic API key above to enable AI analysis.")
+    """
 
 
 def st_main():
