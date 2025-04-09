@@ -1791,38 +1791,53 @@ def run_multi_comparison(selected_sessions):
     
     # Process stretches data for all sessions
     for session in selected_sessions:
-        # Get original stretches data from the session state
-        original_stretches = session.get('stretches')
+        # Store the original data for later use if it's not already stored
+        if 'original_stretches' not in session:
+            original_data = session.get('stretches')
+            
+            # Convert to DataFrame if needed
+            if isinstance(original_data, dict):
+                original_df = pd.DataFrame(original_data)
+            else:
+                original_df = original_data
+                
+            # Store a serialized copy of the original data to avoid reference issues
+            if original_df is not None and not original_df.empty:
+                session['original_stretches'] = original_df.to_dict('records')
         
-        # Always use the original data for each run - convert if needed
-        if isinstance(original_stretches, dict):
-            # Handle JSON serialized DataFrame
-            original_df = pd.DataFrame(original_stretches)
+        # Retrieve the original data (always use the stored original)
+        if 'original_stretches' in session:
+            # Create a fresh DataFrame from the stored records
+            original_df = pd.DataFrame(session['original_stretches'])
         else:
-            # Already a DataFrame
-            original_df = original_stretches
-        
-        # Make a working copy
-        stretches = original_df.copy() if original_df is not None else None
+            # Fallback if original not yet stored
+            original_data = session.get('stretches')
+            if isinstance(original_data, dict):
+                original_df = pd.DataFrame(original_data)
+            else:
+                original_df = original_data.copy() if original_data is not None else None
             
         # Apply upwind filter if activated
-        if st.session_state.upwind_only_filter and stretches is not None and not stretches.empty:
+        if st.session_state.upwind_only_filter and original_df is not None and not original_df.empty:
+            # Create a new copy to work with
+            stretches = original_df.copy()
+            
             # Use the cluster calculation from calculate_clustered_upwind_speed
             # to get just the best pointing segments
             _, _, cluster_indices, _ = calculate_clustered_upwind_speed(stretches)
             
             if cluster_indices:
                 # Keep only the segments in the upwind cluster
-                stretches = stretches.loc[cluster_indices]
+                filtered_df = stretches.loc[cluster_indices].copy()
             else:
                 # Fallback to basic upwind if no cluster was found
-                stretches = stretches[stretches['angle_to_wind'] < 90]
+                filtered_df = stretches[stretches['angle_to_wind'] < 90].copy()
             
             # Update the session with filtered data
-            session['stretches'] = stretches
+            session['stretches'] = filtered_df
         else:
-            # Use original data when filter is off
-            session['stretches'] = original_df
+            # Use original data when filter is off (create a fresh copy)
+            session['stretches'] = original_df.copy()
             
         # Ensure we have data
         if session['stretches'] is None or session['stretches'].empty:
