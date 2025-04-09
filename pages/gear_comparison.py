@@ -1791,14 +1791,19 @@ def run_multi_comparison(selected_sessions):
     
     # Process stretches data for all sessions
     for session in selected_sessions:
-        # Get original stretches data
+        # Get original stretches data from the session state
         original_stretches = session.get('stretches')
         
-        # Make a deep copy to avoid modifying the original
+        # Always use the original data for each run - convert if needed
         if isinstance(original_stretches, dict):
-            stretches = pd.DataFrame(original_stretches)
+            # Handle JSON serialized DataFrame
+            original_df = pd.DataFrame(original_stretches)
         else:
-            stretches = original_stretches.copy()
+            # Already a DataFrame
+            original_df = original_stretches
+        
+        # Make a working copy
+        stretches = original_df.copy() if original_df is not None else None
             
         # Apply upwind filter if activated
         if st.session_state.upwind_only_filter and stretches is not None and not stretches.empty:
@@ -1812,12 +1817,15 @@ def run_multi_comparison(selected_sessions):
             else:
                 # Fallback to basic upwind if no cluster was found
                 stretches = stretches[stretches['angle_to_wind'] < 90]
-        
-        # Update the session with filtered data (or original if filter is off)
-        session['stretches'] = stretches
+            
+            # Update the session with filtered data
+            session['stretches'] = stretches
+        else:
+            # Use original data when filter is off
+            session['stretches'] = original_df
             
         # Ensure we have data
-        if stretches is None or stretches.empty:
+        if session['stretches'] is None or session['stretches'].empty:
             st.warning(f"Session '{session['name']}' has no segment data after filtering.")
             return
     
