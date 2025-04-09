@@ -1744,8 +1744,8 @@ def select_sessions_sidebar(gear_data_list):
     
     # Add upwind filter at the top
     st.sidebar.markdown("### Filter Options")
-    upwind_only = st.sidebar.checkbox("Upwind Only", value=st.session_state.upwind_only_filter, 
-                                    help="Show only upwind segments (angle to wind < 90°)")
+    upwind_only = st.sidebar.checkbox("Upwind Only (Best Pointing Cluster)", value=st.session_state.upwind_only_filter, 
+                                    help="Show only the best upwind pointing clusters (the tightest upwind angles)")
     
     # Update session state with filter selection
     st.session_state.upwind_only_filter = upwind_only
@@ -1785,23 +1785,35 @@ def run_multi_comparison(selected_sessions):
     
     # Add filter indicator to header if active
     if st.session_state.upwind_only_filter:
-        header_text += " (Upwind Only)"
+        header_text += " (Upwind Only - Best Pointing Cluster)"
     
     st.header(header_text)
     
     # Process stretches data for all sessions
     for session in selected_sessions:
-        stretches = session.get('stretches')
+        # Get original stretches data
+        original_stretches = session.get('stretches')
         
-        # Convert from dict to DataFrame if needed (due to JSON serialization)
-        if isinstance(stretches, dict):
-            stretches = pd.DataFrame(stretches)
+        # Make a deep copy to avoid modifying the original
+        if isinstance(original_stretches, dict):
+            stretches = pd.DataFrame(original_stretches)
+        else:
+            stretches = original_stretches.copy()
             
         # Apply upwind filter if activated
-        if st.session_state.upwind_only_filter:
-            stretches = stretches[stretches['angle_to_wind'] < 90]
+        if st.session_state.upwind_only_filter and stretches is not None and not stretches.empty:
+            # Use the cluster calculation from calculate_clustered_upwind_speed
+            # to get just the best pointing segments
+            _, _, cluster_indices, _ = calculate_clustered_upwind_speed(stretches)
             
-        # Update the session with filtered data
+            if cluster_indices:
+                # Keep only the segments in the upwind cluster
+                stretches = stretches.loc[cluster_indices]
+            else:
+                # Fallback to basic upwind if no cluster was found
+                stretches = stretches[stretches['angle_to_wind'] < 90]
+        
+        # Update the session with filtered data (or original if filter is off)
         session['stretches'] = stretches
             
         # Ensure we have data
