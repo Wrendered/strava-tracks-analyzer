@@ -114,8 +114,8 @@ def main():
     if 'gear2_data' not in st.session_state:
         st.session_state.gear2_data = None
     
-    # Load the gear comparison module once
-    from pages.gear_comparison import st_main as gear_comparison
+    # Load the gear comparison module once (from modules to avoid sidebar page navigation)
+    from modules.gear_comparison import st_main as gear_comparison
     
     # Create tabs-based navigation at the top of the page (simpler approach)
     selected_tab = st.radio(
