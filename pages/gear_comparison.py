@@ -356,13 +356,8 @@ def create_combined_polars(gear_data_list):
     """
     fig, (ax_port, ax_starboard) = plt.subplots(1, 2, figsize=(14, 7), subplot_kw={'projection': 'polar'})
     
-    # Create title showing all compared gear
-    gear_names = [gear['name'] for gear in gear_data_list]
-    if len(gear_names) == 2:
-        title = f"Gear Comparison: {gear_names[0]} vs {gear_names[1]}"
-    else:
-        title = f"Gear Comparison: {', '.join(gear_names[:-1])} and {gear_names[-1]}"
-    plt.suptitle(title, fontsize=16)
+    # No title needed - we have a legend with the gear names
+    # and the page header already shows the comparison names
     
     # Define colors for different gear - create a color cycle for many items
     colors = plt.cm.tab10.colors  # Use the tab10 colormap for up to 10 different gear
