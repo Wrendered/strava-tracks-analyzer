@@ -1932,10 +1932,10 @@ def run_multi_comparison(selected_sessions):
         # Fallback for older versions
         st.dataframe(metrics_df, use_container_width=True)
         
-    # Show metrics explanation after the table
+    # Show metrics explanation after the table with help icons
     st.info("""
-    **Pointing Power**: Average of best port/starboard pointing angles. Lower is better (closer to wind).
-    **Clustered Upwind Speed**: Average speed calculated from the cluster of best pointing segments.
+    🧭 **Pointing Power**: Average of best port/starboard pointing angles. Lower is better (closer to wind).
+    ⚡ **Clustered Upwind Speed**: Average speed calculated from the cluster of best pointing segments.
     """)
     
     # Explain the clustering calculation in an expander

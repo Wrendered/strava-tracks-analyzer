@@ -114,26 +114,121 @@ def main():
     if 'gear2_data' not in st.session_state:
         st.session_state.gear2_data = None
     
-    # Add navigation tabs at the top of the main content
-    tabs = ["📊 Track Analysis", "🔄 Gear Comparison"]
-    selected_tab = st.radio("Navigation", tabs, horizontal=True, label_visibility="collapsed")
-    
     # Load the gear comparison module once
     from pages.gear_comparison import st_main as gear_comparison
     
-    # Update session state based on selected tab
-    if selected_tab == "📊 Track Analysis":
-        st.session_state.page = "Track Analysis"
-    else:
-        st.session_state.page = "Gear Comparison"
+    # Create a sidebar navigation instead of radio buttons
+    with st.sidebar:
+        st.header("Navigation")
+        selected_page = st.selectbox(
+            "Choose a page",
+            ["📚 Guide", "📊 Track Analysis", "🔄 Gear Comparison"],
+            index=1 if st.session_state.page == "Track Analysis" else (0 if st.session_state.page == "Guide" else 2),
+            label_visibility="collapsed"
+        )
+        
+        # Update session state based on selected page
+        if selected_page == "📊 Track Analysis":
+            st.session_state.page = "Track Analysis"
+        elif selected_page == "🔄 Gear Comparison":
+            st.session_state.page = "Gear Comparison"
+        else:
+            st.session_state.page = "Guide"
     
-    # Display content based on the selected tab
+    # Display content based on the selected page
     if st.session_state.page == "Track Analysis":
         single_track_analysis()
-    else:
+    elif st.session_state.page == "Gear Comparison":
         gear_comparison()
+    else:
+        # Guide page
+        display_guide()
     
     logger.info(f"App started - {st.session_state.page} page")
+
+
+def display_guide():
+    """Display the guide page with instructions and help."""
+    st.header("📚 WingWizard Guide")
+    
+    st.markdown("""
+    Welcome to WingWizard, your tool for analyzing wingfoil sessions and improving your performance!
+    
+    This guide will help you understand how to use the app's features effectively.
+    """)
+    
+    # Create expandable sections for different aspects of the app
+    with st.expander("🌊 Getting Started", expanded=True):
+        st.markdown("""
+        ### How to Use WingWizard
+        
+        1. **Upload a GPX file** from your Strava or other GPS tracking app
+        2. **Analyze your tracks** to see your performance at different wind angles
+        3. **Save sessions** to compare different gear setups
+        4. **Get insights** about your upwind and downwind performance
+        
+        The app uses wind direction to calculate your angles to the wind, which is crucial for understanding your wingfoiling performance.
+        """)
+        
+        # Add screenshot or illustration
+        st.info("📋 Use the sidebar navigation to switch between Track Analysis and Gear Comparison pages.")
+    
+    with st.expander("🔍 Track Analysis"):
+        st.markdown("""
+        ### Analyzing Your Tracks
+        
+        The Track Analysis page helps you understand your session performance:
+        
+        - **Wind Direction**: Either auto-detected or manually set
+        - **Segment Detection**: Identifies consistent stretches of sailing
+        - **Segment Filtering**: Select specific parts of your session to analyze
+        - **Performance Analysis**: See your best upwind and downwind angles
+        - **Polar Plot**: Visualize your speed at different angles to the wind
+        
+        #### Key Concepts
+        
+        - **Angle to Wind**: 0° is directly upwind (impossible), 90° is across the wind, 180° is directly downwind
+        - **Tack**: Port (left hand forward) or Starboard (right hand forward)
+        - **Suspicious Angles**: Angles too close to the wind (typically <20°) that are physically impossible and excluded from analysis
+        """)
+        
+        # Add explanation with help icons
+        st.info("ℹ️ The segment selection tools let you focus on specific parts of your session. Filter by upwind/downwind, remove suspicious data, or select only your fastest runs.")
+    
+    with st.expander("🔄 Gear Comparison"):
+        st.markdown("""
+        ### Comparing Different Gear
+        
+        The Gear Comparison page allows you to save and compare different sessions:
+        
+        - **Save sessions** from Track Analysis with your gear setup details
+        - **Compare multiple sessions** to see how different gear performs
+        - **Analyze performance differences** in upwind and downwind sailing
+        - **Filter to upwind only** to focus on pointing performance
+        
+        #### Key Metrics
+        
+        - **Pointing Power**: Average of best port/starboard pointing angles (lower is better)
+        - **Clustered Upwind Speed**: Speed at your best upwind angles
+        - **Downwind Performance**: Maximum angle and speed downwind
+        """)
+        
+        # Add explanation with help icons
+        st.info("💡 For the most accurate gear comparisons, try to sail in similar wind conditions and use consistent wind direction estimation.")
+    
+    with st.expander("🧠 Advanced Tips"):
+        st.markdown("""
+        ### Getting the Most from WingWizard
+        
+        - **Wind Direction** is crucial - the auto-detection works well for most sessions, but you can manually adjust it
+        - **Segment Detection** parameters can be tuned - adjust angle tolerance based on how consistent your tracks are
+        - **Suspicious Angle Threshold** filters out implausible angles - 20° is usually good but adjust based on your gear
+        - **Export to Comparison** preserves your selected segments and filters
+        - **Auto-naming** generates session names based on your gear info
+        """)
+        
+        # Add technical tip
+        st.info("🔧 For advanced users: Wind estimation has two methods - 'Simple' works better for real-world tracks, while 'Complex' is optimized for perfect data.")
 
 
 def single_track_analysis():
