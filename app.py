@@ -117,23 +117,22 @@ def main():
     # Load the gear comparison module once
     from pages.gear_comparison import st_main as gear_comparison
     
-    # Create a sidebar navigation instead of radio buttons
-    with st.sidebar:
-        st.header("Navigation")
-        selected_page = st.selectbox(
-            "Choose a page",
-            ["📚 Guide", "📊 Track Analysis", "🔄 Gear Comparison"],
-            index=1 if st.session_state.page == "Track Analysis" else (0 if st.session_state.page == "Guide" else 2),
-            label_visibility="collapsed"
-        )
-        
-        # Update session state based on selected page
-        if selected_page == "📊 Track Analysis":
-            st.session_state.page = "Track Analysis"
-        elif selected_page == "🔄 Gear Comparison":
-            st.session_state.page = "Gear Comparison"
-        else:
-            st.session_state.page = "Guide"
+    # Create tabs-based navigation at the top of the page (simpler approach)
+    selected_tab = st.radio(
+        "Navigation",
+        ["📚 Guide", "📊 Track Analysis", "🔄 Gear Comparison"],
+        horizontal=True,
+        label_visibility="collapsed",
+        index=1 if st.session_state.page == "Track Analysis" else (0 if st.session_state.page == "Guide" else 2)
+    )
+    
+    # Update session state based on selected tab
+    if selected_tab == "📊 Track Analysis":
+        st.session_state.page = "Track Analysis"
+    elif selected_tab == "🔄 Gear Comparison":
+        st.session_state.page = "Gear Comparison"
+    else:
+        st.session_state.page = "Guide"
     
     # Display content based on the selected page
     if st.session_state.page == "Track Analysis":
