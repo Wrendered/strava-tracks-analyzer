@@ -92,7 +92,7 @@ def display_track_map(gpx_data, stretches, wind_direction, estimated_wind=None, 
         <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
                   display: flex; justify-content: center; align-items: center;">
             <div style="font-weight: bold; position: absolute; top: -20px; text-align: center; width: 100%;">
-                WIND {wind_direction}°
+                WIND {wind_direction:.1f}°
             </div>
             <div style="transform: rotate({wind_direction}deg); font-size: 30px;">
                 ⬇
@@ -159,7 +159,7 @@ def display_track_map(gpx_data, stretches, wind_direction, estimated_wind=None, 
         <span><i style="background: lightgray; width: 20px; height: 2px; display: inline-block;"></i> Full Track</span>
         <span style="margin-left: 10px;"><i style="border: 1px dashed gray; width: 20px; height: 0px; display: inline-block;"></i> Suspicious</span>
     </div>
-    <p style="margin: 0;"><b>Wind Direction:</b> {wind_direction}°</p>
+    <p style="margin: 0;"><b>Wind Direction:</b> {wind_direction:.1f}°</p>
     {f'<p style="margin: 0;"><b>Estimated Wind:</b> {estimated_wind:.1f}°</p>' if estimated_wind is not None else ''}
     </div>
     '''
