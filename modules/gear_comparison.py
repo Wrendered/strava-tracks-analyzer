@@ -644,6 +644,9 @@ def create_gear_metrics_table(stretches, gear_info=None):
     upwind = stretches[stretches['angle_to_wind'] < 90]
     downwind = stretches[stretches['angle_to_wind'] >= 90]
     
+    # Import math for upwind progress calculation
+    import math
+    
     # Calculate metrics
     metrics = {}
     
@@ -679,6 +682,11 @@ def create_gear_metrics_table(stretches, gear_info=None):
     # Calculate clustered upwind speeds
     clustered_avg_speed, clustered_max_speed, cluster_indices, cluster_info = calculate_clustered_upwind_speed(stretches)
     
+    # Calculate upwind progress speed if we have both pointing power and clustered speed
+    if pointing_power is not None and clustered_avg_speed is not None:
+        upwind_progress_speed = clustered_avg_speed * math.cos(math.radians(pointing_power))
+        metrics["Upwind - Progress Speed"] = f"{upwind_progress_speed:.1f} knots"
+    
     # Add explanations
     if pointing_power is not None or (clustered_avg_speed is not None and clustered_max_speed is not None):
         with st.expander("About advanced metrics"):
@@ -704,6 +712,16 @@ def create_gear_metrics_table(stretches, gear_info=None):
                 
                 This approach gives a more accurate representation of upwind performance at competitive pointing angles.
                 """)
+                
+                if pointing_power is not None and clustered_avg_speed is not None:
+                    st.markdown("""
+                    **Upwind Progress Speed** combines pointing angle and speed to calculate effective upwind velocity.
+                    
+                    It represents how quickly you actually make progress directly upwind, accounting for both
+                    pointing ability and speed. Higher values mean faster progress directly into the wind.
+                    
+                    Formula: upwind_progress_speed = clustered_upwind_speed * cos(pointing_power_angle)
+                    """)
                 
                 # Add cluster visualization
                 if cluster_indices:
@@ -945,6 +963,9 @@ def create_comparison_table(stretches1, stretches2, gear1_name, gear2_name, gear
     if stretches1.empty or stretches2.empty:
         st.info("Need data for both gear types to perform comparison")
         return
+        
+    # Import math for upwind progress calculations
+    import math
     
     # General comparison
     st.markdown("**Overall Performance**")
@@ -1072,6 +1093,18 @@ def create_comparison_table(stretches1, stretches2, gear1_name, gear2_name, gear
                 f"{clustered_max_speed1:.1f} knots", 
                 f"{clustered_max_speed2:.1f} knots",
                 f"{abs(upwind_max_diff):.1f} knots {gear1_name if upwind_max_diff > 0 else gear2_name}"
+            ]
+            
+        # Upwind Progress Speed (direct upwind velocity)
+        if pointing_power1 is not None and clustered_avg_speed1 is not None and pointing_power2 is not None and clustered_avg_speed2 is not None:
+            upwind_progress_speed1 = clustered_avg_speed1 * math.cos(math.radians(pointing_power1))
+            upwind_progress_speed2 = clustered_avg_speed2 * math.cos(math.radians(pointing_power2))
+            upwind_progress_diff = upwind_progress_speed1 - upwind_progress_speed2
+            
+            upwind_comparison["Upwind Progress Speed"] = [
+                f"{upwind_progress_speed1:.1f} knots", 
+                f"{upwind_progress_speed2:.1f} knots",
+                f"{abs(upwind_progress_diff):.1f} knots {gear1_name if upwind_progress_diff > 0 else gear2_name}"
             ]
         
         # Traditional metrics as fallback
@@ -1907,12 +1940,19 @@ def run_multi_comparison(selected_sessions):
         # Calculate clustered upwind speed
         clustered_avg_speed, clustered_max_speed, _, _ = calculate_clustered_upwind_speed(stretches)
         
+        # Calculate upwind progress speed
+        import math
+        upwind_progress_speed = None
+        if pointing_power is not None and clustered_avg_speed is not None:
+            upwind_progress_speed = clustered_avg_speed * math.cos(math.radians(pointing_power))
+        
         # Create metrics row
         row = {
             'Session': session['name'],
             'Pointing Power (°)': round(pointing_power, 1) if pointing_power is not None else 'N/A',
             'Best Upwind Angle (°)': round(upwind['angle_to_wind'].min(), 1) if not upwind.empty else 'N/A',
             'Clustered Upwind Speed (knots)': round(clustered_avg_speed, 1) if clustered_avg_speed is not None else 'N/A',
+            'Upwind Progress Speed (knots)': round(upwind_progress_speed, 1) if upwind_progress_speed is not None else 'N/A',
             'Max Speed (knots)': round(stretches['speed'].max(), 1),
             'Avg Speed (knots)': round(stretches['speed'].mean(), 1),
             'Best Downwind Angle (°)': round(downwind['angle_to_wind'].max(), 1) if not downwind.empty else 'N/A',
@@ -1936,6 +1976,7 @@ def run_multi_comparison(selected_sessions):
     st.info("""
     🧭 **Pointing Power**: Average of best port/starboard pointing angles. Lower is better (closer to wind).
     ⚡ **Clustered Upwind Speed**: Average speed calculated from the cluster of best pointing segments.
+    🔄 **Upwind Progress Speed**: Effective speed directly upwind (speed × cos(angle)). Higher is better.
     """)
     
     # Explain the clustering calculation in an expander

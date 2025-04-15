@@ -1011,12 +1011,30 @@ def single_track_analysis():
                                                 f"{best_port['speed']:.1f} knots")
                                         st.caption(f"Bearing: {best_port['bearing']:.0f}°")
                                     
-                                    # Find best starboard tack upwind angle
+                                            # Find best starboard tack upwind angle
                                     if not starboard_upwind.empty:
                                         best_starboard = starboard_upwind.loc[starboard_upwind['angle_to_wind'].idxmin()]
                                         st.metric("Best Starboard Angle", f"{best_starboard['angle_to_wind']:.1f}°", 
                                                 f"{best_starboard['speed']:.1f} knots")
                                         st.caption(f"Bearing: {best_starboard['bearing']:.0f}°")
+                                    
+                                    # Calculate and show upwind progress speed when we have both port and starboard data
+                                    if 'best_port' in locals() and 'best_starboard' in locals():
+                                        import math
+                                        
+                                        # Use pointing power (average of best port and starboard angles)
+                                        pointing_power = (best_port['angle_to_wind'] + best_starboard['angle_to_wind']) / 2
+                                        
+                                        # Use average of port and starboard upwind speeds
+                                        avg_upwind_speed = (best_port['speed'] + best_starboard['speed']) / 2
+                                        
+                                        # Calculate upwind progress speed
+                                        upwind_progress_speed = avg_upwind_speed * math.cos(math.radians(pointing_power))
+                                        
+                                        # Display upwind progress speed
+                                        st.metric("Upwind Progress", 
+                                                f"{upwind_progress_speed:.1f} knots", 
+                                                help="Effective speed directly upwind (speed × cos(angle))")
                                 else:
                                     st.info("No upwind data")
                             
