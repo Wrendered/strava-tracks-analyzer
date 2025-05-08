@@ -17,7 +17,8 @@ logger = logging.getLogger(__name__)
 
 from utils.gpx_parser import load_gpx_file
 from utils.calculations import calculate_track_metrics
-from utils.analysis import find_consistent_angle_stretches, analyze_wind_angles as analyze_wind_angles_orig, estimate_wind_direction
+from utils.analysis import find_consistent_angle_stretches, analyze_wind_angles as analyze_wind_angles_orig
+from utils.simplified_wind_estimation import iterative_wind_estimation
 
 # Rename to avoid conflicts
 analyze_wind_angles = analyze_wind_angles_orig

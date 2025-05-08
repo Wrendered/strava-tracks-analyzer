@@ -264,7 +264,7 @@ def estimate_wind_direction(stretches, use_simple_method=True, user_wind_directi
     
     Uses multiple methods and heuristics to estimate the wind direction:
     1. Uses user-provided wind direction as a starting point if available
-    2. If use_simple_method=True, uses the advanced simplified algorithm from simplified_wind_estimation module
+    2. If use_simple_method=True, uses the improved algorithm from simplified_wind_estimation module
     3. Otherwise, uses the older algorithm with clustering and candidate testing
     
     Parameters:
@@ -276,13 +276,16 @@ def estimate_wind_direction(stretches, use_simple_method=True, user_wind_directi
     import logging
     logger = logging.getLogger(__name__)
     
-    # Use the simplified but more accurate algorithm if requested
+    # Use the improved algorithm with full iteration if requested (default)
     if use_simple_method and user_wind_direction is not None:
         try:
-            # Import the simplified algorithm
+            # Import the improved algorithm
             from utils.simplified_wind_estimation import iterative_wind_estimation
             
-            # Use the iterative balanced algorithm
+            # Use the iterative balanced algorithm with our improvements:
+            # 1. First estimation uses ALL points without filtering suspicious angles
+            # 2. Then filter suspicious angles based on that initial estimation
+            # 3. Finally, refine the wind direction with the filtered data
             estimated_wind = iterative_wind_estimation(
                 stretches.copy(), 
                 user_wind_direction,
@@ -290,11 +293,11 @@ def estimate_wind_direction(stretches, use_simple_method=True, user_wind_directi
                 max_iterations=3
             )
             
-            logger.info(f"Estimated wind using balanced tack algorithm: {estimated_wind:.1f}°")
+            logger.info(f"Estimated wind using improved balanced tack algorithm: {estimated_wind:.1f}°")
             return estimated_wind
             
         except Exception as e:
-            logger.error(f"Error in simplified wind estimation: {e}")
+            logger.error(f"Error in wind estimation: {e}")
             # Fall back to the original algorithm
             pass
     import logging
