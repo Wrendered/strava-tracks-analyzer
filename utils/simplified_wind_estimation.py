@@ -39,99 +39,136 @@ def estimate_balanced_wind_direction(stretches, user_wind_direction, suspicious_
     Returns:
     - Estimated balanced wind direction (float) or None if insufficient data
     """
-    if stretches.empty or 'angle_to_wind' not in stretches.columns or 'wind_direction' not in stretches.columns:
-        logger.warning("Missing required columns for wind estimation")
+    # Input validation
+    if stretches is None or stretches.empty:
+        logger.warning("Empty stretches DataFrame provided for wind estimation")
         return user_wind_direction
     
-    # Step 1: Extract upwind segments (angles < 90° from user direction)
-    upwind = stretches[stretches['angle_to_wind'] < 90].copy()
+    try:
+        # Normalize wind direction
+        user_wind_direction = float(user_wind_direction) % 360
+    except (ValueError, TypeError):
+        logger.warning(f"Invalid wind direction value: {user_wind_direction}, defaulting to North (0°)")
+        user_wind_direction = 0
     
-    # Step 2: Filter out suspicious angles (too close to wind) if requested
-    if filter_suspicious:
-        upwind = upwind[upwind['angle_to_wind'] >= suspicious_angle_threshold]
-    
-    if len(upwind) < 3:
-        logger.warning(f"Not enough upwind data points after filtering: {len(upwind)} segments")
+    # Verify required columns exist
+    required_columns = ['angle_to_wind', 'wind_direction', 'tack']
+    if not all(col in stretches.columns for col in required_columns):
+        missing_cols = [col for col in required_columns if col not in stretches.columns]
+        logger.warning(f"Missing required columns for wind estimation: {missing_cols}")
         return user_wind_direction
     
-    # Step 3: Split by tack
-    port_tack = upwind[upwind['tack'] == 'Port']
-    starboard_tack = upwind[upwind['tack'] == 'Starboard']
-    
-    # Need at least one segment in each tack for balance calculation
-    if len(port_tack) == 0 or len(starboard_tack) == 0:
-        logger.warning(f"Missing one tack: Port={len(port_tack)}, Starboard={len(starboard_tack)}")
-        return user_wind_direction
-    
-    # Step 4: Find best upwind angle cluster for each tack
-    port_best_angle = None
-    if len(port_tack) > 0:
-        # Sort by closest angle to wind
-        port_sorted = port_tack.sort_values('angle_to_wind')
+    try:
+        # Step 1: Extract upwind segments (angles < 90° from user direction)
+        upwind = stretches[stretches['angle_to_wind'] < 90].copy()
         
-        # Get the closest angle to wind
-        best_port = port_sorted.iloc[0]
-        best_port_angle = best_port['angle_to_wind']
+        # Step 2: Filter out suspicious angles (too close to wind) if requested
+        if filter_suspicious:
+            upwind = upwind[upwind['angle_to_wind'] >= suspicious_angle_threshold]
         
-        # Select all port segments within 15° of the best angle
-        port_cluster = port_tack[np.abs(port_tack['angle_to_wind'] - best_port_angle) <= 15]
-        
-        # Take up to 5 best segments
-        if len(port_cluster) > 5:
-            port_cluster = port_cluster.sort_values('angle_to_wind').iloc[:5]
-        
-        # Calculate average angle for port cluster
-        port_best_angle = port_cluster['angle_to_wind'].mean()
-        logger.info(f"Port tack best angle: {port_best_angle:.1f}° (from {len(port_cluster)} segments)")
-    
-    starboard_best_angle = None
-    if len(starboard_tack) > 0:
-        # Sort by closest angle to wind
-        starboard_sorted = starboard_tack.sort_values('angle_to_wind')
-        
-        # Get the closest angle to wind
-        best_starboard = starboard_sorted.iloc[0]
-        best_starboard_angle = best_starboard['angle_to_wind']
-        
-        # Select all starboard segments within 15° of the best angle
-        starboard_cluster = starboard_tack[np.abs(starboard_tack['angle_to_wind'] - best_starboard_angle) <= 15]
-        
-        # Take up to 5 best segments
-        if len(starboard_cluster) > 5:
-            starboard_cluster = starboard_cluster.sort_values('angle_to_wind').iloc[:5]
-        
-        # Calculate average angle for starboard cluster
-        starboard_best_angle = starboard_cluster['angle_to_wind'].mean()
-        logger.info(f"Starboard tack best angle: {starboard_best_angle:.1f}° (from {len(starboard_cluster)} segments)")
-    
-    # Step 5: Calculate balanced wind direction
-    if port_best_angle is None or starboard_best_angle is None:
-        logger.warning("Couldn't determine both port and starboard best angles")
-        return user_wind_direction
-    
-    # Calculate the difference between port and starboard best angles
-    angle_difference = starboard_best_angle - port_best_angle
-    
-    # Adjust wind direction by half the difference to balance the angles
-    # If port angle is smaller than starboard: DECREASE wind direction
-    # If starboard angle is smaller than port: INCREASE wind direction
-    wind_adjustment = angle_difference / 2.0
-    
-    # Apply adjustment to current wind direction
-    adjusted_wind = (user_wind_direction - wind_adjustment) % 360
-    
-    # Log the adjustment
-    logger.info(f"Angle difference: {angle_difference:.1f}°, Adjustment: {wind_adjustment:.1f}°")
-    logger.info(f"Adjusted wind: {user_wind_direction:.1f}° → {adjusted_wind:.1f}°")
-    
-    # Step 6: Validate adjusted wind is within reasonable range (60°) of user input
-    if abs(adjusted_wind - user_wind_direction) > 60:
-        wrapped_diff = min(abs(adjusted_wind - user_wind_direction), 360 - abs(adjusted_wind - user_wind_direction))
-        if wrapped_diff > 60:
-            logger.warning(f"Adjusted wind {adjusted_wind:.1f}° too far from user input {user_wind_direction:.1f}°, using user input")
+        # Check if we have enough data
+        if len(upwind) < 3:
+            logger.warning(f"Not enough upwind data points after filtering: {len(upwind)} segments")
             return user_wind_direction
-    
-    return adjusted_wind
+        
+        # Step 3: Split by tack
+        port_tack = upwind[upwind['tack'] == 'Port']
+        starboard_tack = upwind[upwind['tack'] == 'Starboard']
+        
+        # Log the tack distribution
+        logger.debug(f"Upwind segments by tack: Port={len(port_tack)}, Starboard={len(starboard_tack)}")
+        
+        # Need at least one segment in each tack for balance calculation
+        if len(port_tack) == 0 or len(starboard_tack) == 0:
+            logger.warning(f"Missing one tack: Port={len(port_tack)}, Starboard={len(starboard_tack)}")
+            return user_wind_direction
+        
+        # Step 4: Find best upwind angle cluster for each tack
+        port_best_angle = None
+        if len(port_tack) > 0:
+            # Sort by closest angle to wind and by speed (prioritize faster segments)
+            # This helps find the most efficient pointing angle, not just the closest
+            if 'speed' in port_tack.columns:
+                port_tack['efficiency_score'] = port_tack['angle_to_wind'] - (port_tack['speed'] / 5)
+                port_sorted = port_tack.sort_values('efficiency_score')
+            else:
+                port_sorted = port_tack.sort_values('angle_to_wind')
+            
+            # Get the closest angle to wind
+            best_port = port_sorted.iloc[0]
+            best_port_angle = best_port['angle_to_wind']
+            
+            # Select all port segments within 15° of the best angle
+            cluster_range = min(15, max(5, len(port_tack) * 0.2))  # Adaptive range based on data
+            port_cluster = port_tack[np.abs(port_tack['angle_to_wind'] - best_port_angle) <= cluster_range]
+            
+            # Take up to 5 best segments (or fewer if not enough in the cluster)
+            max_segments = min(5, max(3, len(port_tack) // 3))  # Adaptive max segments
+            if len(port_cluster) > max_segments:
+                port_cluster = port_cluster.sort_values('angle_to_wind').iloc[:max_segments]
+            
+            # Calculate average angle for port cluster
+            port_best_angle = port_cluster['angle_to_wind'].mean()
+            logger.info(f"Port tack best angle: {port_best_angle:.1f}° (from {len(port_cluster)} segments)")
+        
+        starboard_best_angle = None
+        if len(starboard_tack) > 0:
+            # Sort by closest angle to wind and by speed (prioritize faster segments)
+            if 'speed' in starboard_tack.columns:
+                starboard_tack['efficiency_score'] = starboard_tack['angle_to_wind'] - (starboard_tack['speed'] / 5)
+                starboard_sorted = starboard_tack.sort_values('efficiency_score')
+            else:
+                starboard_sorted = starboard_tack.sort_values('angle_to_wind')
+            
+            # Get the closest angle to wind
+            best_starboard = starboard_sorted.iloc[0]
+            best_starboard_angle = best_starboard['angle_to_wind']
+            
+            # Select all starboard segments within adaptive range of the best angle
+            cluster_range = min(15, max(5, len(starboard_tack) * 0.2))
+            starboard_cluster = starboard_tack[np.abs(starboard_tack['angle_to_wind'] - best_starboard_angle) <= cluster_range]
+            
+            # Take up to 5 best segments (or fewer if not enough in the cluster)
+            max_segments = min(5, max(3, len(starboard_tack) // 3))
+            if len(starboard_cluster) > max_segments:
+                starboard_cluster = starboard_cluster.sort_values('angle_to_wind').iloc[:max_segments]
+            
+            # Calculate average angle for starboard cluster
+            starboard_best_angle = starboard_cluster['angle_to_wind'].mean()
+            logger.info(f"Starboard tack best angle: {starboard_best_angle:.1f}° (from {len(starboard_cluster)} segments)")
+        
+        # Step 5: Calculate balanced wind direction
+        if port_best_angle is None or starboard_best_angle is None:
+            logger.warning("Couldn't determine both port and starboard best angles")
+            return user_wind_direction
+        
+        # Calculate the difference between port and starboard best angles
+        angle_difference = starboard_best_angle - port_best_angle
+        
+        # Adjust wind direction by half the difference to balance the angles
+        # If port angle is smaller than starboard: DECREASE wind direction
+        # If starboard angle is smaller than port: INCREASE wind direction
+        wind_adjustment = angle_difference / 2.0
+        
+        # Apply adjustment to current wind direction
+        adjusted_wind = (user_wind_direction - wind_adjustment) % 360
+        
+        # Log the adjustment
+        logger.info(f"Angle difference: {angle_difference:.1f}°, Adjustment: {wind_adjustment:.1f}°")
+        logger.info(f"Adjusted wind: {user_wind_direction:.1f}° → {adjusted_wind:.1f}°")
+        
+        # Step 6: Validate adjusted wind is within reasonable range (60°) of user input
+        if abs(adjusted_wind - user_wind_direction) > 60:
+            wrapped_diff = min(abs(adjusted_wind - user_wind_direction), 360 - abs(adjusted_wind - user_wind_direction))
+            if wrapped_diff > 60:
+                logger.warning(f"Adjusted wind {adjusted_wind:.1f}° too far from user input {user_wind_direction:.1f}°, using user input")
+                return user_wind_direction
+        
+        return adjusted_wind
+        
+    except Exception as e:
+        logger.error(f"Error in balanced wind direction estimation: {e}")
+        return user_wind_direction
 
 
 def detect_and_remove_outliers(stretches, wind_direction, suspicious_angle_threshold=20):
@@ -146,32 +183,59 @@ def detect_and_remove_outliers(stretches, wind_direction, suspicious_angle_thres
     Returns:
     - Tuple of (filtered_stretches, outliers_found)
     """
-    if stretches.empty:
+    if stretches is None or stretches.empty:
+        logger.warning("No stretches provided for outlier detection")
         return stretches, False
     
-    # Ensure we have angles calculated for the current wind direction
-    from utils.analysis import analyze_wind_angles
-    stretches_with_angles = analyze_wind_angles(stretches.copy(), wind_direction)
-    
-    # Find suspicious upwind angles (too close to wind)
-    suspicious_segments = stretches_with_angles[
-        (stretches_with_angles['angle_to_wind'] < suspicious_angle_threshold) &
-        (stretches_with_angles['angle_to_wind'] < 90)  # Only consider upwind
-    ]
-    
-    # If we found suspicious segments, filter them out
-    if len(suspicious_segments) > 0:
-        logger.info(f"Found {len(suspicious_segments)} suspicious upwind angles < {suspicious_angle_threshold}°")
+    try:
+        # Normalize wind direction to 0-359 range
+        wind_direction = float(wind_direction) % 360
         
-        for idx, row in suspicious_segments.iterrows():
-            logger.warning(f"Suspiciously small angle to wind detected: {row['angle_to_wind']}° " +
-                         f"(bearing: {row['bearing']}°, wind: {wind_direction}°)")
+        # Ensure we have angles calculated for the current wind direction
+        from utils.analysis import analyze_wind_angles
+        stretches_with_angles = analyze_wind_angles(stretches.copy(), wind_direction)
         
-        # Remove suspicious segments
-        filtered_stretches = stretches.drop(suspicious_segments.index)
-        return filtered_stretches, True
-    
-    return stretches, False
+        # Verify required columns exist
+        required_columns = ['angle_to_wind', 'bearing']
+        missing_columns = [col for col in required_columns if col not in stretches_with_angles.columns]
+        if missing_columns:
+            logger.warning(f"Missing required columns for outlier detection: {missing_columns}")
+            return stretches, False
+        
+        # Find suspicious upwind angles (too close to wind)
+        suspicious_segments = stretches_with_angles[
+            (stretches_with_angles['angle_to_wind'] < suspicious_angle_threshold) &
+            (stretches_with_angles['angle_to_wind'] < 90)  # Only consider upwind
+        ]
+        
+        # If we found suspicious segments, filter them out
+        if len(suspicious_segments) > 0:
+            logger.info(f"Found {len(suspicious_segments)} suspicious upwind angles < {suspicious_angle_threshold}°")
+            
+            # Log details for debugging (limit to max 10 for cleaner logs)
+            for idx, row in suspicious_segments.head(10).iterrows():
+                logger.warning(f"Suspiciously small angle to wind detected: {row['angle_to_wind']:.1f}° " +
+                             f"(bearing: {row['bearing']:.1f}°, wind: {wind_direction:.1f}°)")
+            
+            if len(suspicious_segments) > 10:
+                logger.warning(f"... and {len(suspicious_segments) - 10} more suspicious angles")
+            
+            # Don't remove too many segments at once (max 25% of total)
+            if len(suspicious_segments) > len(stretches) * 0.25:
+                logger.warning(f"Too many suspicious segments ({len(suspicious_segments)} of {len(stretches)}). " +
+                              f"Limiting to most extreme 25%")
+                # Sort by angle and take only the most suspicious ones
+                suspicious_segments = suspicious_segments.sort_values('angle_to_wind').head(int(len(stretches) * 0.25))
+            
+            # Remove suspicious segments
+            filtered_stretches = stretches.drop(suspicious_segments.index)
+            return filtered_stretches, True
+            
+        return stretches, False
+        
+    except Exception as e:
+        logger.error(f"Error in outlier detection: {e}")
+        return stretches, False
 
 
 def iterative_wind_estimation(stretches, initial_wind_direction, suspicious_angle_threshold=20, max_iterations=3):
@@ -192,75 +256,103 @@ def iterative_wind_estimation(stretches, initial_wind_direction, suspicious_angl
     Returns:
     - Final estimated wind direction
     """
-    current_stretches = stretches.copy()
-    current_wind = initial_wind_direction
+    # Input validation
+    if stretches is None or stretches.empty:
+        logger.warning("No stretches provided for wind estimation")
+        return initial_wind_direction
+        
+    if initial_wind_direction is None:
+        logger.warning("No initial wind direction provided, defaulting to North (0°)")
+        initial_wind_direction = 0
     
-    # Phase 1: Initial estimation using ALL data points (no filtering)
-    logger.info(f"Phase 1: Initial estimation using ALL data points with user wind {current_wind:.1f}°")
-    
-    # Run the first estimation WITHOUT filtering suspicious angles
-    first_estimate = estimate_balanced_wind_direction(
-        current_stretches,
-        current_wind,
-        suspicious_angle_threshold,
-        filter_suspicious=False  # Do not filter suspicious angles in the first pass
-    )
-    
-    # If the initial estimation failed, return the user input
-    if first_estimate is None:
-        logger.warning("Initial wind estimation failed, using user input")
-        return current_wind
-    
-    # Update the current wind with the first estimate
-    current_wind = first_estimate
-    logger.info(f"Initial wind estimate (no filtering): {current_wind:.1f}°")
+    try:
+        # Make a safe copy to avoid modifying the input
+        current_stretches = stretches.copy()
+        current_wind = float(initial_wind_direction) % 360  # Normalize to 0-359 range
+        
+        # Phase 1: Initial estimation using ALL data points (no filtering)
+        logger.info(f"Phase 1: Initial estimation using ALL data points with user wind {current_wind:.1f}°")
+        
+        # Run the first estimation WITHOUT filtering suspicious angles
+        first_estimate = estimate_balanced_wind_direction(
+            current_stretches,
+            current_wind,
+            suspicious_angle_threshold,
+            filter_suspicious=False  # Do not filter suspicious angles in the first pass
+        )
+        
+        # If the initial estimation failed, return the user input
+        if first_estimate is None:
+            logger.warning("Initial wind estimation failed, using user input")
+            return current_wind
+        
+        # Update the current wind with the first estimate
+        current_wind = first_estimate
+        logger.info(f"Initial wind estimate (no filtering): {current_wind:.1f}°")
+    except Exception as e:
+        logger.error(f"Error in initial wind estimation phase: {e}")
+        return initial_wind_direction
     
     # Phase 2: Iterative refinement with outlier removal
     logger.info(f"Phase 2: Iterative refinement with outlier removal")
     
-    for iteration in range(max_iterations):
-        # Check for suspicious angles with the current wind direction
-        filtered_stretches, outliers_found = detect_and_remove_outliers(
-            current_stretches, 
-            current_wind, 
-            suspicious_angle_threshold
-        )
-        
-        # If no outliers found, we're done
-        if not outliers_found:
-            logger.info(f"No outliers found, using wind direction: {current_wind:.1f}°")
-            break
-        
-        # If too few segments left, stop iterating
-        if len(filtered_stretches) < 5:  # Require at least 5 segments
-            logger.warning(f"Too few segments left after filtering ({len(filtered_stretches)}), using current wind")
-            break
-        
-        # Continue with filtered stretches and re-estimate wind
-        current_stretches = filtered_stretches
-        logger.info(f"Iteration {iteration+1}: Continuing with {len(current_stretches)} segments after filtering outliers")
-        
-        # Now use balanced wind estimation WITH suspicious angle filtering
-        refined_wind = estimate_balanced_wind_direction(
-            current_stretches,
-            current_wind,
-            suspicious_angle_threshold,
-            filter_suspicious=True  # Filter suspicious angles in subsequent passes
-        )
-        
-        # If estimation failed, keep current estimate
-        if refined_wind is None:
-            logger.warning(f"Wind estimation failed in iteration {iteration+1}, using previous estimate")
-            break
-        
-        # Update current values
-        previous_wind = current_wind
-        current_wind = refined_wind
-        
-        # Check for convergence - if wind direction stabilized, stop iterating
-        if abs(current_wind - previous_wind) < 1.0:
-            logger.info(f"Wind direction stabilized at {current_wind:.1f}°, stopping iterations")
-            break
+    try:
+        for iteration in range(max_iterations):
+            # Check for suspicious angles with the current wind direction
+            try:
+                filtered_stretches, outliers_found = detect_and_remove_outliers(
+                    current_stretches, 
+                    current_wind, 
+                    suspicious_angle_threshold
+                )
+            except Exception as e:
+                logger.error(f"Error detecting outliers in iteration {iteration+1}: {e}")
+                break
+            
+            # If no outliers found, we're done
+            if not outliers_found:
+                logger.info(f"No outliers found, using wind direction: {current_wind:.1f}°")
+                break
+            
+            # If too few segments left, stop iterating
+            minimum_segments = max(5, len(current_stretches) * 0.1)  # At least 5 or 10% of original
+            if len(filtered_stretches) < minimum_segments:
+                logger.warning(f"Too few segments left after filtering ({len(filtered_stretches)}), using current wind")
+                break
+            
+            # Continue with filtered stretches and re-estimate wind
+            current_stretches = filtered_stretches
+            logger.info(f"Iteration {iteration+1}: Continuing with {len(current_stretches)} segments after filtering outliers")
+            
+            # Now use balanced wind estimation WITH suspicious angle filtering
+            try:
+                refined_wind = estimate_balanced_wind_direction(
+                    current_stretches,
+                    current_wind,
+                    suspicious_angle_threshold,
+                    filter_suspicious=True  # Filter suspicious angles in subsequent passes
+                )
+            except Exception as e:
+                logger.error(f"Error in wind estimation in iteration {iteration+1}: {e}")
+                break
+            
+            # If estimation failed, keep current estimate
+            if refined_wind is None:
+                logger.warning(f"Wind estimation failed in iteration {iteration+1}, using previous estimate")
+                break
+            
+            # Update current values
+            previous_wind = current_wind
+            current_wind = refined_wind
+            
+            # Check for convergence - if wind direction stabilized, stop iterating
+            if abs(current_wind - previous_wind) < 1.0:
+                logger.info(f"Wind direction stabilized at {current_wind:.1f}°, stopping iterations")
+                break
+    
+    except Exception as e:
+        logger.error(f"Unexpected error in refinement phase: {e}")
+        # We still return the best estimate we had before the error
     
     logger.info(f"Final wind direction after refinement: {current_wind:.1f}°")
     return current_wind
