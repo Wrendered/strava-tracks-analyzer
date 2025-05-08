@@ -264,15 +264,39 @@ def estimate_wind_direction(stretches, use_simple_method=True, user_wind_directi
     
     Uses multiple methods and heuristics to estimate the wind direction:
     1. Uses user-provided wind direction as a starting point if available
-    2. Analyzes best upwind tacks to find the most likely wind direction
-    3. Clustering bearings to find opposite tacks for validation
-    4. Tests multiple candidate wind angles rather than assuming a fixed 90° relationship
+    2. If use_simple_method=True, uses the advanced simplified algorithm from simplified_wind_estimation module
+    3. Otherwise, uses the older algorithm with clustering and candidate testing
     
     Parameters:
     - stretches: DataFrame of consistent sailing segments
-    - use_simple_method: If True, uses the more reliable approach for real-world tracks
+    - use_simple_method: If True, uses the refined balanced tack algorithm (recommended)
     - user_wind_direction: Optional user-provided wind direction to use as a starting point
     """
+    # Import here to avoid circular imports
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    # Use the simplified but more accurate algorithm if requested
+    if use_simple_method and user_wind_direction is not None:
+        try:
+            # Import the simplified algorithm
+            from utils.simplified_wind_estimation import iterative_wind_estimation
+            
+            # Use the iterative balanced algorithm
+            estimated_wind = iterative_wind_estimation(
+                stretches.copy(), 
+                user_wind_direction,
+                suspicious_angle_threshold=20,
+                max_iterations=3
+            )
+            
+            logger.info(f"Estimated wind using balanced tack algorithm: {estimated_wind:.1f}°")
+            return estimated_wind
+            
+        except Exception as e:
+            logger.error(f"Error in simplified wind estimation: {e}")
+            # Fall back to the original algorithm
+            pass
     import logging
     logger = logging.getLogger(__name__)
     
@@ -299,11 +323,22 @@ def estimate_wind_direction(stretches, use_simple_method=True, user_wind_directi
     if user_wind_direction is not None:
         logger.info(f"Using user-provided wind direction ({user_wind_direction}°) as starting point")
         # Generate a range of candidate angles to test around the user-provided direction
-        # Test angles within ±30° of the user's estimate
+        # Test angles within ±30° of the user's estimate with 10° steps
         range_width = 60
-        num_candidates = 7  # Test 7 angles in the range
-        candidate_offsets = np.linspace(-range_width/2, range_width/2, num_candidates)
-        candidate_winds = [(user_wind_direction + offset) % 360 for offset in candidate_offsets]
+        step_size = 10
+        num_steps = range_width // step_size + 1  # 7 steps: -30, -20, -10, 0, 10, 20, 30
+        candidate_offsets = np.linspace(-range_width/2, range_width/2, num_steps)
+        
+        # Add the exact user wind direction to ensure we test it
+        candidate_winds = [(round(user_wind_direction + offset)) % 360 for offset in candidate_offsets]
+        
+        # For more precision, add a few intermediate values between the 10° increments
+        intermediate_offsets = [5, -5, 15, -15, 25, -25]
+        for offset in intermediate_offsets:
+            candidate_winds.append((round(user_wind_direction + offset)) % 360)
+            
+        # Remove duplicates
+        candidate_winds = sorted(list(set(candidate_winds)))
         
         # Test each candidate wind direction by analyzing the resulting tack patterns
         candidate_scores = []

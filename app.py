@@ -23,6 +23,82 @@ from utils.analysis import find_consistent_angle_stretches, analyze_wind_angles 
 analyze_wind_angles = analyze_wind_angles_orig
 from utils.visualization import display_track_map, plot_polar_diagram
 
+def update_wind_direction(new_wind_direction, recalculate_stretches=True):
+    """
+    Central function to update wind direction and all related calculations.
+    
+    Parameters:
+    - new_wind_direction: The new wind direction to set
+    - recalculate_stretches: Whether to recalculate stretches with the new wind direction
+    
+    Returns:
+    - True if update was successful, False otherwise
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    # Store the previous wind direction for logging
+    prev_wind = st.session_state.get('wind_direction', None)
+    
+    # Update the wind direction in session state
+    st.session_state.wind_direction = new_wind_direction
+    
+    # Log the change
+    if prev_wind is not None and prev_wind != new_wind_direction:
+        logger.info(f"Wind direction updated: {prev_wind}° → {new_wind_direction}°")
+    else:
+        logger.info(f"Wind direction set to: {new_wind_direction}°")
+    
+    # If we don't need to recalculate stretches (e.g., no data loaded yet), we're done
+    if not recalculate_stretches or 'track_stretches' not in st.session_state or st.session_state.track_stretches is None:
+        return True
+    
+    # If we have base (non-analyzed) track data, we'll use it to regenerate stretches
+    if 'track_data' in st.session_state and st.session_state.track_data is not None:
+        try:
+            # Get parameters from session state or use defaults
+            angle_tolerance = st.session_state.get('angle_tolerance', 20)
+            min_duration = st.session_state.get('min_duration', 20)
+            min_distance = st.session_state.get('min_distance', 100)
+            min_speed = st.session_state.get('min_speed', 10.0)
+            
+            # Re-detect stretches from raw data
+            from utils.analysis import find_consistent_angle_stretches
+            base_stretches = find_consistent_angle_stretches(
+                st.session_state.track_data, 
+                angle_tolerance, 
+                min_duration, 
+                min_distance
+            )
+            
+            # Filter by minimum speed
+            min_speed_ms = min_speed * 0.514444  # Convert knots to m/s
+            if not base_stretches.empty:
+                base_stretches = base_stretches[base_stretches['speed'] >= min_speed_ms]
+                
+                # Analyze with new wind direction
+                from utils.analysis import analyze_wind_angles
+                recalculated = analyze_wind_angles(base_stretches, new_wind_direction)
+                
+                # Update session state
+                st.session_state.track_stretches = recalculated
+                logger.info(f"Successfully recalculated {len(recalculated)} stretches with wind direction {new_wind_direction}°")
+                return True
+        except Exception as e:
+            logger.error(f"Error recalculating stretches: {e}")
+            return False
+    
+    # Fallback: try to update existing stretches directly
+    try:
+        from utils.analysis import analyze_wind_angles
+        recalculated = analyze_wind_angles(st.session_state.track_stretches, new_wind_direction)
+        st.session_state.track_stretches = recalculated
+        logger.info(f"Updated existing stretches with wind direction {new_wind_direction}°")
+        return True
+    except Exception as e:
+        logger.error(f"Error updating existing stretches: {e}")
+        return False
+
 def main():
     st.set_page_config(
         layout="wide", 
@@ -106,6 +182,19 @@ def main():
         
     if 'estimated_wind' not in st.session_state:
         st.session_state.estimated_wind = None
+        
+    # Initialize parameters used by the wind direction update function
+    if 'angle_tolerance' not in st.session_state:
+        st.session_state.angle_tolerance = 20
+        
+    if 'min_duration' not in st.session_state:
+        st.session_state.min_duration = 20
+        
+    if 'min_distance' not in st.session_state:
+        st.session_state.min_distance = 100
+        
+    if 'min_speed' not in st.session_state:
+        st.session_state.min_speed = 10.0
         
     # For gear comparison page
     if 'gear1_data' not in st.session_state:
@@ -240,6 +329,10 @@ def single_track_analysis():
     # Initialize export form visibility toggle
     if 'show_export_form' not in st.session_state:
         st.session_state.show_export_form = False
+        
+    # Define wind_direction at the function level so it's always available
+    # Get it from session state to ensure consistency
+    wind_direction = st.session_state.wind_direction
     
     # Show export form dialog if triggered
     if st.session_state.show_export_form and st.session_state.track_data is not None:
@@ -375,13 +468,28 @@ def single_track_analysis():
         # Segment detection parameters
         st.subheader("Segment Detection")
         angle_tolerance = st.slider("Angle Tolerance (°)", 
-                                   min_value=5, max_value=30, value=20,
+                                   min_value=5, max_value=30, 
+                                   value=st.session_state.angle_tolerance,
                                    help="How much the bearing can vary within a segment")
+        # Store in session state
+        st.session_state.angle_tolerance = angle_tolerance
         
         # Minimum criteria
-        min_duration = st.slider("Min Duration (sec)", min_value=5, max_value=60, value=20)
-        min_distance = st.slider("Min Distance (m)", min_value=10, max_value=200, value=100)
-        min_speed = st.slider("Min Speed (knots)", min_value=5.0, max_value=20.0, value=10.0, step=0.5)
+        min_duration = st.slider("Min Duration (sec)", 
+                                min_value=5, max_value=60, 
+                                value=st.session_state.min_duration)
+        st.session_state.min_duration = min_duration
+        
+        min_distance = st.slider("Min Distance (m)", 
+                                min_value=10, max_value=200, 
+                                value=st.session_state.min_distance)
+        st.session_state.min_distance = min_distance
+        
+        min_speed = st.slider("Min Speed (knots)", 
+                             min_value=5.0, max_value=20.0, 
+                             value=st.session_state.min_speed, 
+                             step=0.5)
+        st.session_state.min_speed = min_speed
         
         st.subheader("Speed Filter")
         active_speed_threshold = st.slider("Active Speed Threshold (knots)", 
@@ -481,17 +589,27 @@ def single_track_analysis():
             """)
             
             # Simple wind direction slider
-            wind_direction = st.slider(
+            user_wind_direction = st.slider(
                 "Enter approximate wind direction", 
                 min_value=0, 
                 max_value=359, 
-                value=int(st.session_state.wind_direction) if st.session_state.wind_direction is not None else 90,
-                step=5,
+                value=round(st.session_state.wind_direction) if st.session_state.wind_direction is not None else 90,
+                step=1,  # Allow 1-degree increments for fine-tuning
                 key="main_wind_slider"
             )
             
-            # Save to session state
-            st.session_state.wind_direction = wind_direction
+            # Check if the slider value is different from session state
+            wind_direction_changed = 'wind_direction' in st.session_state and st.session_state.wind_direction != user_wind_direction
+                
+            # Add a button to immediately apply the wind direction change
+            if st.button("🔄 Apply Wind Direction", help="Recalculate all metrics with this wind direction") or wind_direction_changed:
+                # Use our central function to update wind direction and all calculations
+                # This will update session state and recalculate stretches
+                if update_wind_direction(user_wind_direction):
+                    # Update local variable for this render
+                    wind_direction = user_wind_direction
+                    st.success(f"Wind direction updated to {user_wind_direction}°")
+                    st.rerun() # Force UI refresh with new angles
     
     # Process new file upload or use session state data
     if uploaded_file is not None:
@@ -530,8 +648,67 @@ def single_track_analysis():
                 
                 logger.info(f"Loaded GPX file with {len(gpx_data)} points")
                 
-                progress_bar.progress(70)
-                progress_text.markdown("💨 **Stage 4/5:** Analyzing wind patterns...")
+                # Calculate basic track metrics
+                metrics = calculate_track_metrics(gpx_data, min_speed_knots=active_speed_threshold)
+                st.session_state.track_metrics = metrics
+                
+                # Create stretches
+                stretches = find_consistent_angle_stretches(
+                    gpx_data, angle_tolerance, min_duration, min_distance
+                )
+                
+                # Filter stretches by speed
+                if not stretches.empty:
+                    min_speed_ms = min_speed * 0.514444  # Convert knots to m/s
+                    stretches = stretches[stretches['speed'] >= min_speed_ms]
+                    
+                # Store in session state if not empty
+                if not stretches.empty:
+                    st.session_state.track_stretches = stretches
+                    
+                    progress_bar.progress(70)
+                    progress_text.markdown("💨 **Stage 4/5:** Analyzing wind patterns...")
+                    
+                    # Use the user-provided wind direction as starting point
+                    try:
+                        # Get wind direction from session state (always available)
+                        user_provided_wind = st.session_state.wind_direction
+                        
+                        # Properly import the function to make sure it's available
+                        from utils.analysis import estimate_wind_direction
+                        
+                        # First, analyze stretches with the current wind direction to get angle_to_wind and tack columns
+                        from utils.analysis import analyze_wind_angles
+                        analyzed_stretches = analyze_wind_angles(stretches.copy(), user_provided_wind)
+                        
+                        # Now use the balanced wind algorithm for more precise results
+                        from utils.simplified_wind_estimation import iterative_wind_estimation
+                        
+                        # Estimate wind direction using the precise algorithm with analyzed stretches
+                        refined_wind = iterative_wind_estimation(
+                            analyzed_stretches.copy(),
+                            user_provided_wind,
+                            suspicious_angle_threshold=20,
+                            max_iterations=3
+                        )
+                        
+                        # If refinement succeeded, use our central update function
+                        if refined_wind is not None:
+                            logger.info(f"Refined wind direction from user input: {refined_wind:.1f}°")
+                            
+                            # Store estimated wind separately for reference
+                            st.session_state.estimated_wind = refined_wind
+                            
+                            # Use our centralized function to update wind direction and all calculations
+                            update_success = update_wind_direction(refined_wind)
+                            
+                            if update_success:
+                                # Update local variable for this render
+                                wind_direction = refined_wind
+                            else:
+                                logger.error("Failed to update calculations with refined wind direction")
+                    except Exception as e:
+                        logger.error(f"Error estimating wind direction: {e}")
                 
                 progress_bar.progress(90)
                 progress_text.markdown("📊 **Stage 5/5:** Preparing visualization...")
@@ -543,9 +720,12 @@ def single_track_analysis():
                 import time
                 time.sleep(0.5)
                 
-                # When loading completes, remind about wind direction
-                st.success("✅ File loaded successfully! Now set the approximate wind direction →")
-                st.info("👉 **Important:** Set the wind direction slider to the approximate wind direction from your session. The wind direction indicates where the wind is coming FROM.")
+                # When loading completes, provide feedback about wind direction
+                if 'estimated_wind' in st.session_state and st.session_state.estimated_wind is not None:
+                    st.success(f"✅ File loaded successfully! Wind direction estimated to be {st.session_state.wind_direction:.1f}° based on your track data.")
+                else:
+                    st.success("✅ File loaded successfully! Now set the approximate wind direction →")
+                    st.info("👉 **Important:** Set the wind direction slider to the approximate wind direction from your session. The wind direction indicates where the wind is coming FROM.")
             except Exception as e:
                 logger.error(f"Error loading GPX file: {e}")
                 st.error(f"Error loading GPX file: {e}")
@@ -593,7 +773,8 @@ def single_track_analysis():
             
             with col1:
                 st.markdown(f"**🏄 {track_name}**")
-                st.markdown(f"📅 **Date:** {metrics['date']}")
+                date_value = metrics.get('date', 'Unknown')
+                st.markdown(f"📅 **Date:** {date_value}")
                 
             with col2:
                 # Duration metrics
@@ -703,7 +884,8 @@ def single_track_analysis():
                 
                 # Calculate angles relative to wind - this is critical for all visualizations
                 # This ensures the angles and upwind/downwind classification use the current wind_direction
-                stretches = analyze_wind_angles(stretches, wind_direction)
+                current_wind = st.session_state.wind_direction
+                stretches = analyze_wind_angles(stretches, current_wind)
                 
                 # Save the analyzed stretches to session state - create a copy to avoid reference issues
                 st.session_state.track_stretches = stretches.copy()
@@ -882,31 +1064,38 @@ def single_track_analysis():
                     # Add wind re-estimation button with simplified approach
                     if st.button("🧭 Re-analyze Wind Direction", help="Refine wind direction based on selected segments", key="reestimate_wind", use_container_width=True):
                         if segment_count >= 3:  # Need at least 3 segments for reliable estimation
-                            # Import here to avoid scope issues
-                            from utils.analysis import estimate_wind_direction
-                            
+                            # First, analyze stretches with the current wind direction
+                            from utils.analysis import analyze_wind_angles
                             # Get the current wind direction
                             current_wind = st.session_state.wind_direction
                             
-                            # Use the improved algorithm with user wind as starting point
-                            refined_wind = estimate_wind_direction(
-                                estimation_stretches, 
-                                use_simple_method=True,
-                                user_wind_direction=current_wind  # Current wind from session state
+                            # Make sure the stretches have angle_to_wind and tack columns
+                            analyzed_stretches = analyze_wind_angles(estimation_stretches.copy(), current_wind)
+                            
+                            # Now import the precise iterative algorithm
+                            from utils.simplified_wind_estimation import iterative_wind_estimation
+                            
+                            # Use the precise algorithm with full iteration on the analyzed stretches
+                            refined_wind = iterative_wind_estimation(
+                                analyzed_stretches.copy(),
+                                current_wind,
+                                suspicious_angle_threshold=20,
+                                max_iterations=3
                             )
                             
                             if refined_wind is not None:
+                                # Store the refined estimate for reference
                                 st.session_state.estimated_wind = refined_wind
-                                st.session_state.wind_direction = refined_wind
-                                st.success(f"✅ Wind direction refined to {refined_wind:.1f}° based on your {segment_count} selected segments")
                                 
-                                # Also recalculate angles with new wind direction
-                                if st.session_state.track_stretches is not None:
-                                    recalculated = analyze_wind_angles(stretches, refined_wind)
-                                    st.session_state.track_stretches = recalculated
+                                # Use our centralized function to update wind direction and all calculations
+                                update_success = update_wind_direction(refined_wind)
                                 
-                                # Force a rerun to update all calculations with new wind direction
-                                st.rerun()
+                                if update_success:
+                                    st.success(f"✅ Wind direction refined to {refined_wind:.1f}° based on your {segment_count} selected segments")
+                                    # Force a rerun to update all calculations with new wind direction
+                                    st.rerun()
+                                else:
+                                    st.error("Failed to update calculations with refined wind direction")
                             else:
                                 st.error("⚠️ Couldn't refine wind direction from selected segments")
                         else:
@@ -914,23 +1103,22 @@ def single_track_analysis():
                 
                 # Display the map after segment selection
                 st.subheader("Track Map")
-                # Get estimated_wind from session state or use wind_direction as fallback
-                map_estimated_wind = st.session_state.get('estimated_wind', wind_direction)
-                display_track_map(gpx_data, stretches, wind_direction, map_estimated_wind)
+                # Always use the current wind_direction from session state
+                # This ensures the map always reflects the current wind setting
+                current_wind = st.session_state.wind_direction
+                display_track_map(gpx_data, stretches, current_wind, current_wind)
                 
                 # Apply immediately when button is clicked
                 # Make sure we trigger a complete recalculation
                 if apply_button:
-                    # Force recalculation with current wind direction before rerun
-                    # This is the key fix to ensure filters and wind direction changes affect all visualizations
-                    if st.session_state.track_stretches is not None:
-                        # Get the base stretches before wind angle calculation
-                        base_stretches = st.session_state.track_stretches.copy()
-                        # Use the global analyze_wind_angles function
-                        # Recalculate wind angles with current wind direction
-                        recalculated_stretches = analyze_wind_angles(base_stretches, wind_direction)
-                        # Update session state with fresh calculation
-                        st.session_state.track_stretches = recalculated_stretches
+                    # Use our centralized function to ensure everything is calculated with current wind direction
+                    current_wind = st.session_state.wind_direction
+                    update_success = update_wind_direction(current_wind)
+                    
+                    if update_success:
+                        logger.info(f"Recalculated all with wind direction {current_wind}° after applying filters")
+                    else:
+                        logger.error(f"Failed to recalculate with wind direction {current_wind}° after applying filters")
                     
                     # Now trigger a full page rerun with the updated data
                     st.rerun()
