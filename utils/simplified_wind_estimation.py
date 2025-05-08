@@ -89,8 +89,10 @@ def estimate_balanced_wind_direction(stretches, user_wind_direction, suspicious_
             # Sort by closest angle to wind and by speed (prioritize faster segments)
             # This helps find the most efficient pointing angle, not just the closest
             if 'speed' in port_tack.columns:
-                port_tack['efficiency_score'] = port_tack['angle_to_wind'] - (port_tack['speed'] / 5)
-                port_sorted = port_tack.sort_values('efficiency_score')
+                # Create a copy to avoid the SettingWithCopyWarning
+                port_tack_copy = port_tack.copy()
+                port_tack_copy.loc[:, 'efficiency_score'] = port_tack_copy['angle_to_wind'] - (port_tack_copy['speed'] / 5)
+                port_sorted = port_tack_copy.sort_values('efficiency_score')
             else:
                 port_sorted = port_tack.sort_values('angle_to_wind')
             
@@ -115,8 +117,10 @@ def estimate_balanced_wind_direction(stretches, user_wind_direction, suspicious_
         if len(starboard_tack) > 0:
             # Sort by closest angle to wind and by speed (prioritize faster segments)
             if 'speed' in starboard_tack.columns:
-                starboard_tack['efficiency_score'] = starboard_tack['angle_to_wind'] - (starboard_tack['speed'] / 5)
-                starboard_sorted = starboard_tack.sort_values('efficiency_score')
+                # Create a copy to avoid the SettingWithCopyWarning
+                starboard_tack_copy = starboard_tack.copy()
+                starboard_tack_copy.loc[:, 'efficiency_score'] = starboard_tack_copy['angle_to_wind'] - (starboard_tack_copy['speed'] / 5)
+                starboard_sorted = starboard_tack_copy.sort_values('efficiency_score')
             else:
                 starboard_sorted = starboard_tack.sort_values('angle_to_wind')
             
