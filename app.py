@@ -365,72 +365,23 @@ def single_track_analysis():
         # Clean up sidebar by removing redundant headers
         st.header("Track Analysis Parameters")
         
-        # Wind direction section
-        st.subheader("Wind Direction")
-        if 'wind_mode' not in st.session_state:
-            st.session_state.wind_mode = "Auto-detect"  # Default to auto-detect
-            
-        wind_mode = st.radio(
-            "Wind Direction Mode",
-            ["Auto-detect", "Manual"], 
-            index=0 if st.session_state.wind_mode == "Auto-detect" else 1,
-            horizontal=True,
-            key="wind_mode_radio"
-        )
+        # Wind adjustment controls in sidebar
+        st.subheader("Wind Analysis")
+        st.info("Adjust the wind direction on the main panel to see how it affects your analysis.")
         
-        # Update wind mode in session state
-        st.session_state.wind_mode = wind_mode
-        
-        # Wind direction input or display
-        if wind_mode == "Manual":
-            wind_direction = st.number_input(
-                "Wind Direction (°)", 
-                min_value=0, 
-                max_value=359, 
-                value=int(st.session_state.wind_direction) if st.session_state.wind_direction is not None else 90,
-                help="Direction the wind is coming FROM (0-359°)"
-            )
-            # Save to session state
-            st.session_state.wind_direction = wind_direction
-            auto_detect_wind = False
-        else:
-            st.info("Wind direction will be automatically estimated from your track data")
-            auto_detect_wind = True
-            
-            # If we already have an estimated wind direction, show the fine-tuning slider
-            if st.session_state.estimated_wind is not None:
-                estimated = st.session_state.estimated_wind
-                st.write(f"Estimated: {estimated:.1f}°")
-                adjusted_wind = st.slider(
-                    "Fine-tune Wind Direction", 
-                    min_value=max(0, int(estimated) - 20),
-                    max_value=min(359, int(estimated) + 20),
-                    value=int(st.session_state.wind_direction) if st.session_state.wind_direction is not None else int(estimated),
-                    key="wind_fine_tune"
-                )
-                wind_direction = adjusted_wind
-                
-                # Update wind direction and force a refresh if it changed
-                if wind_direction != st.session_state.wind_direction:
-                    st.session_state.wind_direction = wind_direction
-                    # Add a button to apply wind direction changes immediately
-                    if st.button("Apply Wind Direction", type="primary"):
-                        # This will trigger a rerun with the updated wind direction
-                        st.rerun()
-            else:
-                # No estimate yet
-                wind_direction = st.session_state.wind_direction
+        # No automatic detection anymore - all based on user input
+        auto_detect_wind = False
         
         # Segment detection parameters
         st.subheader("Segment Detection")
         angle_tolerance = st.slider("Angle Tolerance (°)", 
-                                   min_value=5, max_value=20, value=12,
+                                   min_value=5, max_value=30, value=20,
                                    help="How much the bearing can vary within a segment")
         
         # Minimum criteria
-        min_duration = st.slider("Min Duration (sec)", min_value=1, max_value=60, value=10)
-        min_distance = st.slider("Min Distance (m)", min_value=10, max_value=200, value=50)
-        min_speed = st.slider("Min Speed (knots)", min_value=5.0, max_value=30.0, value=10.0, step=0.5)
+        min_duration = st.slider("Min Duration (sec)", min_value=5, max_value=60, value=20)
+        min_distance = st.slider("Min Distance (m)", min_value=10, max_value=200, value=100)
+        min_speed = st.slider("Min Speed (knots)", min_value=5.0, max_value=20.0, value=10.0, step=0.5)
         
         st.subheader("Speed Filter")
         active_speed_threshold = st.slider("Active Speed Threshold (knots)", 
@@ -459,10 +410,10 @@ def single_track_analysis():
             
         suspicious_angle_threshold = st.slider(
             "Suspicious Angle Threshold (°)", 
-            min_value=10, 
+            min_value=15, 
             max_value=35, 
             value=st.session_state.suspicious_angle_threshold,
-            help="Angles closer to wind than this are considered suspicious and excluded from wind direction estimation"
+            help="Angles closer to wind than this are considered suspicious and excluded from wind direction estimation (20° recommended)"
         )
         
         # Update the threshold in session state
@@ -501,19 +452,46 @@ def single_track_analysis():
         Smaller angles are better for upwind performance, larger angles are better for downwind.
         """)
     
-    # File uploader
-    uploaded_file = st.file_uploader("Upload a GPX file", type=['gpx'], key="track_analysis_uploader")
+    # File uploader and wind direction input in the main area
+    col1, col2 = st.columns([2, 1])
     
-    # Button to clear data
-    if st.session_state.track_data is not None:
-        if st.button("Clear Current Data", key="clear_track_data"):
-            st.session_state.track_data = None
-            st.session_state.track_metrics = None
-            st.session_state.track_stretches = None
-            st.session_state.track_name = None
-            st.session_state.wind_direction = 90
-            st.session_state.estimated_wind = None
-            st.rerun()
+    with col1:
+        uploaded_file = st.file_uploader("Upload a GPX file", type=['gpx'], key="track_analysis_uploader")
+        
+        # Button to clear data
+        if st.session_state.track_data is not None:
+            if st.button("Clear Current Data", key="clear_track_data"):
+                st.session_state.track_data = None
+                st.session_state.track_metrics = None
+                st.session_state.track_stretches = None
+                st.session_state.track_name = None
+                st.session_state.wind_direction = 90
+                st.session_state.estimated_wind = None
+                st.rerun()
+    
+    with col2:
+        # Wind direction guide in main area for first-time users
+        with st.container(border=True):
+            st.markdown("### Wind Direction")
+            st.markdown("""
+            **Wind direction is where the wind is coming FROM:**
+            
+            0° (N): North ⬇️ | 90° (E): East ⬅️  
+            180° (S): South ⬆️ | 270° (W): West ➡️
+            """)
+            
+            # Simple wind direction slider
+            wind_direction = st.slider(
+                "Enter approximate wind direction", 
+                min_value=0, 
+                max_value=359, 
+                value=int(st.session_state.wind_direction) if st.session_state.wind_direction is not None else 90,
+                step=5,
+                key="main_wind_slider"
+            )
+            
+            # Save to session state
+            st.session_state.wind_direction = wind_direction
     
     # Process new file upload or use session state data
     if uploaded_file is not None:
@@ -564,6 +542,10 @@ def single_track_analysis():
                 # Add a bit of drama with a sleep
                 import time
                 time.sleep(0.5)
+                
+                # When loading completes, remind about wind direction
+                st.success("✅ File loaded successfully! Now set the approximate wind direction →")
+                st.info("👉 **Important:** Set the wind direction slider to the approximate wind direction from your session. The wind direction indicates where the wind is coming FROM.")
             except Exception as e:
                 logger.error(f"Error loading GPX file: {e}")
                 st.error(f"Error loading GPX file: {e}")
@@ -578,18 +560,21 @@ def single_track_analysis():
         gpx_data = st.session_state.track_data
         track_name = st.session_state.track_name
         
-        # Show a nicely styled info message
+        # Show a nicely styled info message with wind direction emphasis
         st.markdown(f"""
         <div style="background-color: rgba(0, 104, 201, 0.1); padding: 10px; border-radius: 5px; border-left: 5px solid #0068C9; margin-bottom: 1rem;">
             <div style="display: flex; align-items: center;">
                 <div style="font-size: 1.5rem; margin-right: 10px;">📋</div>
                 <div>
                     <strong>Using previously loaded data:</strong> {track_name}<br>
-                    <span style="font-size: 0.9rem;">Ready to analyze! Adjust parameters in the sidebar if needed.</span>
+                    <span style="font-size: 0.9rem;">Make sure the wind direction is correct for accurate analysis!</span>
                 </div>
             </div>
         </div>
         """, unsafe_allow_html=True)
+        
+        # Draw attention to the wind direction slider
+        st.info("👉 **Important:** Verify the wind direction slider setting to get accurate results. The wind direction indicates where the wind is coming FROM.")
     else:
         gpx_data = pd.DataFrame()
     
@@ -670,60 +655,51 @@ def single_track_analysis():
                 # Save to session state
                 st.session_state.track_stretches = stretches
                 
-                # Always try to estimate wind direction for comparison
+                # Initialize estimated_wind
                 estimated_wind = None
+                
+                # Use the user-provided wind direction and refine it
+                # This uses the improved algorithm that accepts user direction as a starting point
                 try:
-                    # First try the new upwind tack analysis method
-                    # This requires angles to be calculated with some initial wind direction
-                    # We use default wind direction (90°) as starting point
-                    initial_wind = 90
-                    temp_stretches = analyze_wind_angles(stretches, initial_wind)
+                    # Import the function
+                    from utils.analysis import estimate_wind_direction
                     
-                    # Try to get wind direction using the new tack-based method
-                    from utils.analysis import estimate_wind_direction_from_upwind_tacks
-                    # Pass the suspicious angle threshold from user settings
-                    estimated_wind = estimate_wind_direction_from_upwind_tacks(
-                        temp_stretches, 
-                        suspicious_angle_threshold=suspicious_angle_threshold
+                    # Refine the user-provided wind direction using our improved algorithm
+                    user_provided_wind = st.session_state.wind_direction
+                    
+                    # Use the new approach with user's wind direction as starting point
+                    refined_wind = estimate_wind_direction(
+                        stretches, 
+                        use_simple_method=True,  # Simple method is more reliable
+                        user_wind_direction=user_provided_wind
                     )
                     
-                    # If the new method succeeded, use it
-                    if estimated_wind is not None:
-                        logger.info(f"Estimated wind direction: {estimated_wind:.1f}° (using upwind tack analysis)")
-                        estimation_method = "upwind tack analysis"
-                    else:
-                        # Fall back to standard method
-                        estimated_wind = estimate_wind_direction(stretches, use_simple_method=use_simple_method)
-                        if estimated_wind is not None:
-                            logger.info(f"Estimated wind direction: {estimated_wind:.1f}° (using {'simple' if use_simple_method else 'complex'} method)")
-                            estimation_method = "standard clustering"
-                    
-                    if estimated_wind is not None:
-                        # Save to session state
-                        st.session_state.estimated_wind = estimated_wind
+                    if refined_wind is not None and abs(refined_wind - user_provided_wind) > 5:
+                        # Only show if there's a significant difference
+                        logger.info(f"Refined wind direction from user input: {refined_wind:.1f}°")
                         
-                        # If auto-detect is on, use the estimated wind
-                        if auto_detect_wind:
-                            # Display success and use the estimated value
-                            wind_direction = estimated_wind
-                            st.session_state.wind_direction = wind_direction
-                            st.sidebar.success(f"Using estimated wind direction: {estimated_wind:.1f}° ({estimation_method})")
-                        else:
-                            # In manual mode, just show the estimated value for comparison
-                            st.sidebar.info(f"Estimated wind direction: {estimated_wind:.1f}° ({estimation_method})")
+                        # Store the refined estimate but don't automatically use it
+                        estimated_wind = refined_wind
+                        st.session_state.estimated_wind = refined_wind
+                        
+                        # Show a suggestion to the user if the refinement is significantly different
+                        st.sidebar.info(f"💡 Based on your data, the wind might be coming from {refined_wind:.0f}° " +
+                                       f"(differs by {abs(refined_wind - user_provided_wind):.0f}° from your estimate)")
+                        
+                        # Add a button to accept the refinement
+                        if st.sidebar.button("Use refined wind direction", type="primary"):
+                            st.session_state.wind_direction = refined_wind
+                            wind_direction = refined_wind
+                            st.rerun()
                     else:
-                        if auto_detect_wind:
-                            logger.warning("Could not estimate wind direction, using default")
-                            st.sidebar.warning("Could not estimate wind direction")
+                        # No significant refinement or couldn't refine
+                        estimated_wind = user_provided_wind
+                        st.session_state.estimated_wind = user_provided_wind
                 except Exception as e:
-                    logger.error(f"Error estimating wind direction: {e}")
-                    if auto_detect_wind:
-                        st.sidebar.error(f"Error estimating wind direction")
-                
-                # If we're using auto but couldn't estimate, fall back to default
-                if auto_detect_wind and estimated_wind is None:
-                    # We keep the default or manually overridden value of wind_direction
-                    pass
+                    logger.error(f"Error refining wind direction: {e}")
+                    # Continue with user-provided direction
+                    estimated_wind = user_provided_wind
+                    st.session_state.estimated_wind = user_provided_wind
                 
                 # Calculate angles relative to wind - this is critical for all visualizations
                 # This ensures the angles and upwind/downwind classification use the current wind_direction
@@ -903,55 +879,44 @@ def single_track_analysis():
                         estimation_stretches = stretches
                         segment_count = len(stretches)
                     
-                    # Add wind re-estimation button
-                    if st.button("🧭 Re-estimate Wind", help="Recalculate wind direction based on current segments", key="reestimate_wind", use_container_width=True):
+                    # Add wind re-estimation button with simplified approach
+                    if st.button("🧭 Re-analyze Wind Direction", help="Refine wind direction based on selected segments", key="reestimate_wind", use_container_width=True):
                         if segment_count >= 3:  # Need at least 3 segments for reliable estimation
                             # Import here to avoid scope issues
-                            from utils.analysis import estimate_wind_direction, estimate_wind_direction_from_upwind_tacks
+                            from utils.analysis import estimate_wind_direction
                             
-                            # First try the new upwind tack analysis method
-                            # This requires angles to be calculated with some initial wind direction 
-                            # We use the current wind direction for this initial calculation
+                            # Get the current wind direction
                             current_wind = st.session_state.wind_direction
                             
-                            # Calculate angles to wind using current wind direction
-                            temp_stretches = analyze_wind_angles(estimation_stretches, current_wind)
-                            
-                            # Try to estimate using the new tack-based method first
-                            # Pass the suspicious angle threshold from user settings
-                            new_wind_estimate = estimate_wind_direction_from_upwind_tacks(
-                                temp_stretches,
-                                suspicious_angle_threshold=suspicious_angle_threshold
+                            # Use the improved algorithm with user wind as starting point
+                            refined_wind = estimate_wind_direction(
+                                estimation_stretches, 
+                                use_simple_method=True,
+                                user_wind_direction=current_wind  # Current wind from session state
                             )
                             
-                            # If that fails, fall back to the regular method
-                            if new_wind_estimate is None:
-                                new_wind_estimate = estimate_wind_direction(estimation_stretches, use_simple_method=True)
-                                method_used = "standard clustering"
-                            else:
-                                method_used = "upwind tack analysis"
-                            
-                            if new_wind_estimate is not None:
-                                st.session_state.estimated_wind = new_wind_estimate
-                                st.session_state.wind_direction = new_wind_estimate
-                                st.success(f"✅ Wind direction re-estimated: {new_wind_estimate:.1f}° based on your {segment_count} selected segments")
+                            if refined_wind is not None:
+                                st.session_state.estimated_wind = refined_wind
+                                st.session_state.wind_direction = refined_wind
+                                st.success(f"✅ Wind direction refined to {refined_wind:.1f}° based on your {segment_count} selected segments")
                                 
                                 # Also recalculate angles with new wind direction
-                                # Use the global analyze_wind_angles function
                                 if st.session_state.track_stretches is not None:
-                                    recalculated = analyze_wind_angles(stretches, new_wind_estimate)
+                                    recalculated = analyze_wind_angles(stretches, refined_wind)
                                     st.session_state.track_stretches = recalculated
                                 
                                 # Force a rerun to update all calculations with new wind direction
                                 st.rerun()
                             else:
-                                st.error("⚠️ Couldn't estimate wind direction from selected segments")
+                                st.error("⚠️ Couldn't refine wind direction from selected segments")
                         else:
-                            st.warning(f"⚠️ Need at least 3 segments to estimate wind direction. You have {segment_count} selected.")
+                            st.warning(f"⚠️ Need at least 3 segments to refine wind direction. You have {segment_count} selected.")
                 
                 # Display the map after segment selection
                 st.subheader("Track Map")
-                display_track_map(gpx_data, stretches, wind_direction, estimated_wind)
+                # Get estimated_wind from session state or use wind_direction as fallback
+                map_estimated_wind = st.session_state.get('estimated_wind', wind_direction)
+                display_track_map(gpx_data, stretches, wind_direction, map_estimated_wind)
                 
                 # Apply immediately when button is clicked
                 # Make sure we trigger a complete recalculation
@@ -996,7 +961,7 @@ def single_track_analysis():
                         with st.container(border=True):
                             best_cols = st.columns(2)
                             
-                            # UPWIND PERFORMANCE - Best angles/speeds
+                            # UPWIND PERFORMANCE - Best angles/speeds - SIMPLIFIED
                             with best_cols[0]:
                                 st.markdown("#### 🔼 Best Upwind")
                                 if not upwind.empty:
@@ -1004,37 +969,45 @@ def single_track_analysis():
                                     port_upwind = upwind[upwind['tack'] == 'Port']
                                     starboard_upwind = upwind[upwind['tack'] == 'Starboard']
                                     
-                                    # Find best port tack upwind angle
-                                    if not port_upwind.empty:
+                                    # Find best port tack upwind angle - just use minimum angle
+                                    if not port_upwind.empty and len(port_upwind) > 0:
                                         best_port = port_upwind.loc[port_upwind['angle_to_wind'].idxmin()]
                                         st.metric("Best Port Angle", f"{best_port['angle_to_wind']:.1f}°", 
                                                 f"{best_port['speed']:.1f} knots")
                                         st.caption(f"Bearing: {best_port['bearing']:.0f}°")
                                     
-                                            # Find best starboard tack upwind angle
-                                    if not starboard_upwind.empty:
+                                    # Find best starboard tack upwind angle - just use minimum angle
+                                    if not starboard_upwind.empty and len(starboard_upwind) > 0:
                                         best_starboard = starboard_upwind.loc[starboard_upwind['angle_to_wind'].idxmin()]
                                         st.metric("Best Starboard Angle", f"{best_starboard['angle_to_wind']:.1f}°", 
                                                 f"{best_starboard['speed']:.1f} knots")
                                         st.caption(f"Bearing: {best_starboard['bearing']:.0f}°")
                                     
-                                    # Calculate and show upwind progress speed when we have both port and starboard data
+                                    # Calculate upwind progress speed when we have both tacks
                                     if 'best_port' in locals() and 'best_starboard' in locals():
                                         import math
                                         
-                                        # Use pointing power (average of best port and starboard angles)
+                                        # Simply average the angles - no balancing or weighting
                                         pointing_power = (best_port['angle_to_wind'] + best_starboard['angle_to_wind']) / 2
                                         
-                                        # Use average of port and starboard upwind speeds
+                                        # Average speed
                                         avg_upwind_speed = (best_port['speed'] + best_starboard['speed']) / 2
                                         
                                         # Calculate upwind progress speed
                                         upwind_progress_speed = avg_upwind_speed * math.cos(math.radians(pointing_power))
                                         
-                                        # Display upwind progress speed
+                                        # Display upwind progress speed 
                                         st.metric("Upwind Progress", 
                                                 f"{upwind_progress_speed:.1f} knots", 
                                                 help="Effective speed directly upwind (speed × cos(angle))")
+                                        
+                                        # Display session average wind direction - simple average
+                                        # Note the angle difference but don't balance
+                                        angle_diff = abs(best_port['angle_to_wind'] - best_starboard['angle_to_wind'])
+                                        st.markdown("---")
+                                        st.info(f"**Session Average Wind Direction**  \n"
+                                              f"Combined angle: {pointing_power:.1f}°  \n"
+                                              f"(Port/Starboard difference: {angle_diff:.1f}°)")
                                 else:
                                     st.info("No upwind data")
                             
