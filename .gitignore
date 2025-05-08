@@ -172,3 +172,10 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# Claude settings
+**/.claude/settings.local.json
+
+# Testing and debugging output
+plots/
+*.bak
