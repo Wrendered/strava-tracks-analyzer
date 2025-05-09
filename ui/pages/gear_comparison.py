@@ -16,95 +16,7 @@ from core.models.gear_item import GearItem
 
 logger = logging.getLogger(__name__)
 
-def plot_comparison_radar(gear_items: Dict[str, GearItem], selected_items: List[str]) -> plt.Figure:
-    """Create a radar plot comparing selected gear items.
-    
-    Args:
-        gear_items: Dictionary of all gear items
-        selected_items: List of selected gear item IDs
-        
-    Returns:
-        plt.Figure: Matplotlib figure with the radar plot
-    """
-    if not selected_items or len(selected_items) == 0:
-        return None
-    
-    # Filter to only selected items
-    items = [gear_items[item_id] for item_id in selected_items if item_id in gear_items]
-    
-    # Define the metrics to compare
-    metrics = [
-        ('avg_speed', 'Avg Speed (kn)'),
-        ('upwind_progress_speed', 'Upwind Progress (kn)'),
-        ('best_port_upwind_angle', 'Best Port Angle (°)'),
-        ('best_starboard_upwind_angle', 'Best Starboard Angle (°)'),
-        ('best_port_upwind_speed', 'Port Upwind Speed (kn)'),
-        ('best_starboard_upwind_speed', 'Starboard Upwind Speed (kn)')
-    ]
-    
-    # Set up the plot
-    fig = plt.figure(figsize=(8, 8))
-    ax = fig.add_subplot(111, polar=True)
-    
-    # Number of metrics
-    num_metrics = len(metrics)
-    
-    # Set up the angles for the radar plot (equally spaced)
-    angles = np.linspace(0, 2*np.pi, num_metrics, endpoint=False).tolist()
-    # Make it a full circle
-    angles += angles[:1]
-    
-    # Set up the axis labels
-    metric_labels = [m[1] for m in metrics]
-    
-    # Reverse angle metrics (lower is better)
-    angle_metrics = ['best_port_upwind_angle', 'best_starboard_upwind_angle']
-    
-    # Colors for different items
-    colors = plt.cm.tab10(np.linspace(0, 1, len(items)))
-    
-    # Plot each item
-    for i, item in enumerate(items):
-        # Get the values
-        values = []
-        all_values = []  # To determine axis scale
-        
-        for j, (metric_key, _) in enumerate(metrics):
-            value = getattr(item, metric_key)
-            
-            # Skip if value is None
-            if value is None:
-                values.append(0)
-                continue
-                
-            # For angle metrics, lower is better, so invert
-            if metric_key in angle_metrics:
-                # We'll actually invert the scale later
-                values.append(value)
-            else:
-                values.append(value)
-                
-            all_values.append(value)
-        
-        # Make the plot circular
-        values += values[:1]
-        
-        # Plot the values
-        ax.plot(angles, values, color=colors[i], linewidth=2, label=item.title)
-        ax.fill(angles, values, color=colors[i], alpha=0.1)
-    
-    # Set the labels
-    ax.set_xticks(angles[:-1])
-    ax.set_xticklabels(metric_labels)
-    
-    # Add legend
-    ax.legend(loc='upper right', bbox_to_anchor=(0.1, 0.1))
-    
-    # Additional styling
-    plt.grid(True)
-    plt.tight_layout()
-    
-    return fig
+# No need for the radar chart function anymore
 
 def display_page():
     """Display the gear comparison page."""
@@ -215,20 +127,53 @@ def display_page():
     
     # If we have selected items, display the comparison
     if selected_items:
-        # Show radar chart comparing key metrics
-        st.markdown("### 📡 Performance Radar")
+        # Show a simple tabular comparison
+        st.markdown("### 📊 Performance Comparison")
         
-        fig = plot_comparison_radar(gear_items, selected_items)
-        if fig:
-            st.pyplot(fig)
+        # Create a summary table of key metrics
+        comparison_data = []
+        
+        # Define the metrics we want to compare
+        metrics = [
+            ('avg_speed', 'Avg Speed (kn)'),
+            ('upwind_progress_speed', 'Upwind Progress (kn)'),
+            ('best_port_upwind_angle', 'Best Port Upwind (°)'),
+            ('best_starboard_upwind_angle', 'Best Starboard Upwind (°)'),
+            ('best_port_upwind_speed', 'Port Upwind Speed (kn)'),
+            ('best_starboard_upwind_speed', 'Starboard Upwind Speed (kn)')
+        ]
+        
+        # Get data for all selected items
+        for item_id in selected_items:
+            if item_id in gear_items:
+                item = gear_items[item_id]
+                item_data = {'Title': item.title}
+                
+                # Add each metric
+                for metric_key, metric_name in metrics:
+                    value = getattr(item, metric_key)
+                    if value is not None:
+                        if 'angle' in metric_key:
+                            item_data[metric_name] = f"{value:.1f}°"
+                        else:
+                            item_data[metric_name] = f"{value:.1f}"
+                    else:
+                        item_data[metric_name] = "N/A"
+                        
+                comparison_data.append(item_data)
+        
+        # Display as a DataFrame if we have data
+        if comparison_data:
+            comparison_df = pd.DataFrame(comparison_data)
+            st.dataframe(comparison_df, use_container_width=True)
             
-            st.caption("""
-            **Note on radar chart:**
+            st.info("""
+            **Note on metrics:**
             - For angles (port and starboard), smaller values are better (closer to wind)
             - For speeds, larger values are better
             """)
         else:
-            st.info("Not enough data to create radar chart.")
+            st.info("No data available for comparison.")
         
         # Show detailed comparison table
         st.markdown("### 📋 Detailed Comparison")
