@@ -459,22 +459,7 @@ def display_page():
         estimated_wind = st.session_state.get('estimated_wind')
         stretches = st.session_state.track_stretches if 'track_stretches' in st.session_state else None
         
-        # Display track summary in a nice card-like container
-        cols = st.columns([3, 1])
-        with cols[0]:
-            st.markdown("### 📌 Track Overview")
-        
-        # Add export to comparison option - always displayed
-        if metrics:
-            with cols[1]:
-                st.markdown("**🔄 Export to Comparison**", help="Export this track's data to the Gear Comparison page")
-            
-            # Save the angle results in session state for export
-            angle_results = calculate_average_angle_from_segments(stretches)
-            st.session_state.angle_results = angle_results
-            
-            # Show export form directly without requiring an initial button click
-            export_id = export_to_comparison_button(metrics, stretches)
+        # Display track summary in a nice card-like container without header
         
         with st.container(border=True):
             # Create a modern track summary layout
@@ -675,6 +660,17 @@ def display_page():
                     st.pyplot(fig)
                 else:
                     st.info("Not enough data for polar plot (need at least 3 segments)")
+            
+            # Add export to comparison option after performance analysis
+            if metrics:
+                st.markdown("### 🔄 Export to Gear Comparison")
+                
+                # Save the angle results in session state for export
+                angle_results = calculate_average_angle_from_segments(stretches)
+                st.session_state.angle_results = angle_results
+                
+                # Show export form directly
+                export_id = export_to_comparison_button(metrics, stretches)
             
             # Create tabs for segment data
             tab1, tab2 = st.tabs(["🔍 Segment Data", "📋 Advanced Selection"])
