@@ -1,5 +1,5 @@
 """
-Track analysis page for the WingWizard app.
+Track analysis page for the Foil Lab app.
 
 This module contains the UI for the track analysis page.
 """
@@ -21,6 +21,7 @@ from core.wind.models import WindEstimate
 from ui.components.visualization import display_track_map, plot_polar_diagram
 from ui.components.filters import segment_selection_bar, segment_details_table, segment_selection_checkboxes
 from ui.components.wind_ui import wind_direction_selector, reestimate_wind_button
+from ui.components.gear_export import export_to_comparison_button
 
 # Import config settings
 from config.settings import (
@@ -459,7 +460,30 @@ def display_page():
         stretches = st.session_state.track_stretches if 'track_stretches' in st.session_state else None
         
         # Display track summary in a nice card-like container
-        st.markdown("### 📌 Track Overview")
+        cols = st.columns([3, 1])
+        with cols[0]:
+            st.markdown("### 📌 Track Overview")
+        
+        # Add export to comparison option in a button in the right column
+        if metrics:
+            with cols[1]:
+                if st.button("🔄 Export to Comparison", type="primary", use_container_width=True, help="Export this track's data to the Gear Comparison page"):
+                    # Set a flag to show the export form
+                    st.session_state.show_export_form = True
+                    st.rerun()
+            
+            # Show export form if the flag is set
+            if st.session_state.get('show_export_form', False):
+                # Save the angle results in session state for export
+                angle_results = calculate_average_angle_from_segments(stretches)
+                st.session_state.angle_results = angle_results
+                
+                # Show export form and handle submission
+                export_id = export_to_comparison_button(metrics, stretches)
+                
+                # If export was successful, clear the flag
+                if export_id:
+                    st.session_state.show_export_form = False
         
         with st.container(border=True):
             # Create a modern track summary layout

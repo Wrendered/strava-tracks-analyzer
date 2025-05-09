@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 # Import page modules
 from ui.pages.analysis import display_page as display_analysis_page
-# We'll add other pages later as they are refactored
+from ui.pages.gear_comparison import display_page as display_gear_comparison_page
 
 def main():
     """Main application entry point"""
@@ -122,28 +122,7 @@ def main():
     if st.session_state.page == "Track Analysis":
         display_analysis_page()
     elif st.session_state.page == "Gear Comparison":
-        st.header("🔄 Gear Comparison")
-        
-        # Coming soon message with visual styling
-        st.markdown("""
-        <div style="text-align: center; padding: 30px; background-color: #f8f9fa; border-radius: 8px; margin: 20px 0;">
-            <img src="https://img.icons8.com/fluency/96/000000/maintenance.png" style="width: 70px; height: 70px; margin-bottom: 15px;">
-            <h2 style="margin-top: 0;">Coming Soon!</h2>
-            <p style="font-size: 1.1rem; margin-bottom: 20px;">
-                The Gear Comparison feature is currently under development.
-            </p>
-            <p style="font-size: 0.9rem; color: #666; max-width: 500px; margin: 0 auto 15px auto;">
-                This feature will allow you to compare your performance across different equipment setups,
-                helping you optimize your gear choices for various conditions.
-            </p>
-            <div style="background-color: rgba(0, 104, 201, 0.07); padding: 10px; border-radius: 6px; max-width: 450px; margin: 0 auto;">
-                <p style="font-style: italic; margin: 0;">
-                    Have specific gear comparison features you'd like to see?<br>
-                    Let me know on Instagram: <a href="https://www.instagram.com/heart_wrench/" target="_blank">@heart_wrench</a>
-                </p>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+        display_gear_comparison_page()
     else:
         # About page with instructions and features
         st.header("📚 About Foil Lab")
