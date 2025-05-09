@@ -36,12 +36,34 @@ def wind_direction_selector(
     """
     with st.container(border=True):
         st.markdown("### Wind Direction")
-        st.markdown("""
-        **Wind direction is where the wind is coming FROM:**
         
-        0° (N): North ⬇️ | 90° (E): East ⬅️  
-        180° (S): South ⬆️ | 270° (W): West ➡️
-        """)
+        # More visual direction reference
+        st.markdown("""
+        <div style="display: flex; justify-content: center; margin-bottom: 10px;">
+            <div style="text-align: center; padding: 8px; background-color: #f0f2f6; border-radius: 4px; width: 100%;">
+                <strong>Wind Direction Reference</strong><br>
+                <span style="font-size: 13px;">Wind direction is where the wind is coming FROM</span>
+                <div style="display: flex; justify-content: space-around; margin-top: 5px;">
+                    <div style="text-align: center;">
+                        <div style="font-weight: bold;">0°</div>
+                        <div>North (↓)</div>
+                    </div>
+                    <div style="text-align: center;">
+                        <div style="font-weight: bold;">90°</div>
+                        <div>East (←)</div>
+                    </div>
+                    <div style="text-align: center;">
+                        <div style="font-weight: bold;">180°</div>
+                        <div>South (↑)</div>
+                    </div>
+                    <div style="text-align: center;">
+                        <div style="font-weight: bold;">270°</div>
+                        <div>West (→)</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
         
         # Display estimated wind if available, but without confidence indicators
         if estimated_wind is not None:

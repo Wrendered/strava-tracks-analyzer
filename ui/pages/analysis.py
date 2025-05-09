@@ -174,14 +174,21 @@ def display_page():
         st.divider()
         st.subheader("Wind Angle Explanation")
         st.markdown("""
-        The angles shown in the analysis are measured as **degrees off the wind direction**:
-        - **0°** means sailing directly into the wind (impossible)
-        - **45°** is a typical upwind angle
-        - **90°** is sailing across the wind (beam reach)
-        - **180°** is sailing directly downwind
-        
-        Smaller angles are better for upwind performance, larger angles are better for downwind.
-        """)
+        <div style="padding: 8px; background-color: #f0f2f6; border-radius: 4px;">
+            <div style="font-weight: bold; margin-bottom: 5px;">The angles shown are measured relative to the wind:</div>
+            <ul style="margin-top: 0; padding-left: 20px;">
+                <li><strong>0°</strong> = sailing directly into the wind (impossible)</li>
+                <li><strong>45°</strong> = typical upwind angle</li>
+                <li><strong>90°</strong> = sailing across the wind (beam reach)</li>
+                <li><strong>180°</strong> = sailing directly downwind</li>
+            </ul>
+            <div style="margin-top: 8px;">
+                <span style="color: #0068C9;"><strong>Tip:</strong></span> 
+                Smaller angles = better upwind performance<br>
+                Larger angles = better downwind speed
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
     
     # File uploader and wind direction input in the main area
     # File uploader section with initial wind direction
@@ -193,6 +200,22 @@ def display_page():
     
     # Show upload options when a file is selected but not yet processed
     if uploaded_file is not None and ('track_data' not in st.session_state or uploaded_file.name != st.session_state.get('current_file_name')):
+        st.info("👉 Please set the initial wind direction and click 'Analyze Track' to process this file.")
+        
+        # Add direction reference
+        st.markdown("""
+        <div style="margin-bottom: 12px; padding: 8px; background-color: #f0f2f6; border-radius: 4px; text-align: center;">
+            <strong>Wind Direction Reference</strong><br>
+            <span style="font-size: 13px;">Wind direction is where the wind is coming FROM</span>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; margin-top: 5px; gap: 4px; text-align: center;">
+                <div>0° = North (↓)</div>
+                <div>90° = East (←)</div>
+                <div>180° = South (↑)</div>
+                <div>270° = West (→)</div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        
         # Upload options in columns for better layout
         col1, col2 = st.columns([1, 1])
         with col1:
@@ -207,12 +230,20 @@ def display_page():
             )
             # Store for use during processing
             st.session_state.init_wind_direction = initial_wind
+            
+            # Flag to track if user wants to analyze
+            if 'analyze_confirmed' not in st.session_state:
+                st.session_state.analyze_confirmed = False
         
         with col2:
             # Process button to analyze with the selected wind direction
             if st.button("Analyze Track", type="primary"):
-                # Will be processed below in the regular file upload section
-                pass
+                st.session_state.analyze_confirmed = True
+                st.session_state.process_this_file = uploaded_file.name
+                # Will be processed below only after this button is clicked
+    else:
+        # Reset confirmation flag when no new file is selected
+        st.session_state.analyze_confirmed = False
     
     # Button to clear data - shown after a file is loaded
     if 'track_data' in st.session_state and st.session_state.track_data is not None:
@@ -224,6 +255,7 @@ def display_page():
             st.session_state.wind_direction = DEFAULT_WIND_DIRECTION
             st.session_state.estimated_wind = None
             st.session_state.current_file_name = None
+            st.session_state.analyze_confirmed = False
             st.rerun()
     
     # Wind direction adjustment section - only shown after a file is loaded
@@ -268,8 +300,8 @@ def display_page():
             on_change_callback=on_wind_change
         )
     
-    # Process new file upload
-    if uploaded_file is not None:
+    # Process new file upload - but only if user has confirmed with Analyze button
+    if uploaded_file is not None and st.session_state.get('analyze_confirmed', False) and uploaded_file.name == st.session_state.get('process_this_file'):
         logger.info(f"Processing uploaded file: {uploaded_file.name}")
         
         # Add a fancy progress bar with stages
