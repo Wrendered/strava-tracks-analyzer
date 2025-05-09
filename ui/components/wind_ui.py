@@ -19,16 +19,16 @@ logger = logging.getLogger(__name__)
 def wind_direction_selector(
     current_wind: float,
     estimated_wind: Optional[float] = None,
-    estimate_confidence: Optional[str] = None,
+    estimate_confidence: Optional[str] = None,  # Kept for backward compatibility
     on_change_callback: Optional[callable] = None
 ) -> float:
     """
-    Creates a wind direction selector UI component with explanations.
+    Creates a simple wind direction selector UI component with explanations.
     
     Args:
         current_wind: Current wind direction in degrees
         estimated_wind: Optional estimated wind direction (if available)
-        estimate_confidence: Confidence level of estimate ("high", "medium", "low", "none")
+        estimate_confidence: Optional parameter kept for backward compatibility
         on_change_callback: Function to call when wind direction changes
     
     Returns:
@@ -43,28 +43,11 @@ def wind_direction_selector(
         180° (S): South ⬆️ | 270° (W): West ➡️
         """)
         
-        # Add confidence indicator if available
-        if estimated_wind is not None and estimate_confidence is not None:
-            confidence_colors = {
-                "high": "green",
-                "medium": "blue",
-                "low": "orange",
-                "none": "gray"
-            }
-            confidence_emoji = {
-                "high": "✅", 
-                "medium": "✓", 
-                "low": "⚠️", 
-                "none": "❓"
-            }
-            
-            color = confidence_colors.get(estimate_confidence, "gray")
-            emoji = confidence_emoji.get(estimate_confidence, "❓")
-            
+        # Display estimated wind if available, but without confidence indicators
+        if estimated_wind is not None:
             st.markdown(f"""
             <div style="padding: 5px 10px; background-color: rgba(0,0,0,0.05); border-radius: 5px; margin-bottom: 10px;">
-                <span style="color: {color}; font-weight: bold;">{emoji} {estimate_confidence.title()} confidence</span> 
-                in estimated wind direction of {estimated_wind:.1f}°
+                Calculated wind direction: {estimated_wind:.1f}°
             </div>
             """, unsafe_allow_html=True)
         
@@ -152,16 +135,8 @@ def reestimate_wind_button(
             # Call the on_success callback
             if on_success_callback is not None:
                 if on_success_callback(refined_wind):
-                    # Show success message with confidence level
-                    confidence_emoji = {
-                        "high": "✅", 
-                        "medium": "✓", 
-                        "low": "⚠️", 
-                        "none": "❓"
-                    }[wind_estimate.confidence]
-                    
-                    st.success(f"{confidence_emoji} Wind direction refined to {refined_wind:.1f}° " + 
-                             f"({wind_estimate.confidence} confidence) based on {segment_count} segments")
+                    # Show success message without confidence level
+                    st.success(f"Wind direction refined to {refined_wind:.1f}° based on {segment_count} segments")
                     
                     # Show tack information if available
                     if wind_estimate.has_both_tacks:
@@ -175,8 +150,7 @@ def reestimate_wind_button(
                     st.error("Failed to update calculations with refined wind direction")
             else:
                 # No callback provided, just show the result
-                st.info(f"Estimated wind direction: {refined_wind:.1f}° " + 
-                      f"({wind_estimate.confidence} confidence)")
+                st.info(f"Estimated wind direction: {refined_wind:.1f}°")
                 return wind_estimate
         else:
             st.error("⚠️ Couldn't refine wind direction from selected segments")

@@ -121,10 +121,6 @@ def display_page():
         # Clean up sidebar by removing redundant headers
         st.header("Track Analysis Parameters")
         
-        # Wind adjustment controls in sidebar
-        st.subheader("Wind Analysis")
-        st.info("Adjust the wind direction on the main panel to see how it affects your analysis.")
-        
         # No automatic detection anymore - all based on user input
         auto_detect_wind = False
         
@@ -247,13 +243,6 @@ def display_page():
         # Get current values
         current_wind = st.session_state.wind_direction
         estimated_wind = st.session_state.get('estimated_wind')
-        estimate_confidence = None
-        
-        # Get confidence level if available
-        if 'wind_estimate' in st.session_state:
-            estimate_data = st.session_state.wind_estimate
-            if isinstance(estimate_data, dict) and 'confidence' in estimate_data:
-                estimate_confidence = estimate_data['confidence']
         
         # Use the wind direction selector component
         def on_wind_change(new_wind_direction):
@@ -264,7 +253,6 @@ def display_page():
         user_wind_direction = wind_direction_selector(
             current_wind=current_wind,
             estimated_wind=estimated_wind,
-            estimate_confidence=estimate_confidence,
             on_change_callback=on_wind_change
         )
     
@@ -350,11 +338,10 @@ def display_page():
                         # If estimation succeeded, use our central update function
                         if not wind_estimate.user_provided:
                             refined_wind = wind_estimate.direction
-                            logger.info(f"Refined wind direction from user input: {refined_wind:.1f}° with {wind_estimate.confidence} confidence")
+                            logger.info(f"Refined wind direction from user input: {refined_wind:.1f}°")
                             
                             # Store estimate for reference
                             st.session_state.estimated_wind = refined_wind
-                            st.session_state.wind_estimate = wind_estimate.to_dict()
                             
                             # Use our centralized function to update wind direction and all calculations
                             update_success = update_wind_direction(refined_wind)
@@ -375,10 +362,10 @@ def display_page():
                 
                 # When loading completes, provide feedback about wind direction
                 if 'estimated_wind' in st.session_state and st.session_state.estimated_wind is not None:
-                    st.success(f"✅ File loaded successfully! Wind direction estimated to be {st.session_state.wind_direction:.1f}° based on your track data.")
+                    st.success(f"✅ File loaded successfully! Average wind direction calculated to be {st.session_state.wind_direction:.1f}°.")
                 else:
-                    st.success("✅ File loaded successfully! Now set the approximate wind direction →")
-                    st.info("👉 **Important:** Set the wind direction slider to the approximate wind direction from your session. The wind direction indicates where the wind is coming FROM.")
+                    st.success("✅ File loaded successfully! Now set the wind direction →")
+                    st.info("👉 Set the wind direction slider to the approximate wind direction from your session (where the wind is coming FROM).")
             except Exception as e:
                 logger.error(f"Error loading GPX file: {e}")
                 st.error(f"Error loading GPX file: {e}")
@@ -407,7 +394,7 @@ def display_page():
         """, unsafe_allow_html=True)
         
         # Draw attention to the wind direction slider
-        st.info("👉 **Important:** Verify the wind direction slider setting to get accurate results. The wind direction indicates where the wind is coming FROM.")
+        st.info("👉 Verify the wind direction setting to get accurate results.")
     else:
         gpx_data = pd.DataFrame()
     
