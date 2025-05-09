@@ -258,12 +258,8 @@ def display_page():
                 key="main_wind_slider"
             )
             
-            # Check if the slider value is different from session state
-            wind_direction_changed = ('wind_direction' in st.session_state and 
-                                      st.session_state.wind_direction != user_wind_direction)
-                
-            # Add a button to immediately apply the wind direction change
-            if st.button("🔄 Apply Wind Direction", help="Recalculate all metrics with this wind direction") or wind_direction_changed:
+            # Add a button to apply the wind direction change
+            if st.button("🔄 Apply Wind Direction", help="Recalculate all metrics with this wind direction"):
                 # Use our central function to update wind direction and all calculations
                 # This will update session state and recalculate stretches
                 if update_wind_direction(user_wind_direction):
