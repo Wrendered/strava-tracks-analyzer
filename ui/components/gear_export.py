@@ -33,7 +33,6 @@ def export_to_comparison_button(metrics: Dict[str, Any], stretches: pd.DataFrame
     
     # Create a container for the export UI
     with st.container(border=True):
-        st.markdown("### 🔄 Export to Gear Comparison")
         st.markdown("""
         <div style="font-size: 0.9rem;">
             Export this track's data to the Gear Comparison page to compare with other sessions.
