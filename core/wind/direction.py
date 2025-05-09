@@ -2,13 +2,16 @@
 Wind direction estimation algorithms.
 
 This module contains algorithms for estimating wind direction based on sailing patterns.
+It provides a unified API for different wind estimation methods with appropriate confidence levels.
 """
 
 import numpy as np
 import pandas as pd
 import logging
-from typing import Dict, List, Optional, Tuple, Union, Callable
+from typing import Dict, List, Optional, Tuple, Union, Callable, Any
 from sklearn.cluster import KMeans
+
+from core.wind.models import WindEstimate
 
 logger = logging.getLogger(__name__)
 

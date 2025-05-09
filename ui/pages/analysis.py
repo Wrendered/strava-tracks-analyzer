@@ -14,11 +14,13 @@ from datetime import timedelta
 from core.gpx import load_gpx_file
 from core.metrics import calculate_track_metrics, calculate_average_angle_from_segments
 from core.segments import find_consistent_angle_stretches, analyze_wind_angles
-from core.wind.direction import iterative_wind_estimation
+from core.wind.estimate import estimate_wind_direction
+from core.wind.models import WindEstimate
 
 # Import UI components
 from ui.components.visualization import display_track_map, plot_polar_diagram
 from ui.components.filters import segment_selection_bar, segment_details_table, segment_selection_checkboxes
+from ui.components.wind_ui import wind_direction_selector, reestimate_wind_button
 
 # Import config settings
 from config.settings import (
@@ -331,24 +333,25 @@ def display_page():
                         # Get wind direction from session state (always available)
                         user_provided_wind = st.session_state.get('wind_direction', DEFAULT_WIND_DIRECTION)
                         
-                        # First, analyze stretches with the current wind direction to get angle_to_wind and tack columns
+                        # Use the new unified wind estimation API
                         analyzed_stretches = analyze_wind_angles(stretches.copy(), user_provided_wind)
                         
-                        # Now use the balanced wind algorithm for more precise results
-                        # Estimate wind direction using the precise algorithm with analyzed stretches
-                        refined_wind = iterative_wind_estimation(
+                        # Get wind estimate with confidence level
+                        wind_estimate = estimate_wind_direction(
                             analyzed_stretches.copy(),
                             user_provided_wind,
-                            suspicious_angle_threshold=suspicious_angle_threshold,
-                            max_iterations=3
+                            method="iterative",
+                            suspicious_angle_threshold=suspicious_angle_threshold
                         )
                         
-                        # If refinement succeeded, use our central update function
-                        if refined_wind is not None:
-                            logger.info(f"Refined wind direction from user input: {refined_wind:.1f}°")
+                        # If estimation succeeded, use our central update function
+                        if not wind_estimate.user_provided:
+                            refined_wind = wind_estimate.direction
+                            logger.info(f"Refined wind direction from user input: {refined_wind:.1f}° with {wind_estimate.confidence} confidence")
                             
-                            # Store estimated wind separately for reference
+                            # Store estimate for reference
                             st.session_state.estimated_wind = refined_wind
+                            st.session_state.wind_estimate = wind_estimate.to_dict()
                             
                             # Use our centralized function to update wind direction and all calculations
                             update_success = update_wind_direction(refined_wind)
