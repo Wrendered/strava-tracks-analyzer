@@ -239,7 +239,13 @@ def display_page():
     
     with col2:
         # Use our new wind direction UI component
-        current_wind = st.session_state.get('wind_direction', DEFAULT_WIND_DIRECTION)
+        # Initialize wind direction if not already set
+        if 'wind_direction' not in st.session_state:
+            # This ensures first-time uploads will use the default
+            st.session_state.wind_direction = DEFAULT_WIND_DIRECTION
+        
+        # Get current values
+        current_wind = st.session_state.wind_direction
         estimated_wind = st.session_state.get('estimated_wind')
         estimate_confidence = None
         
@@ -322,8 +328,13 @@ def display_page():
                     
                     # Use the user-provided wind direction as starting point
                     try:
-                        # Get wind direction from session state (always available)
-                        user_provided_wind = st.session_state.get('wind_direction', DEFAULT_WIND_DIRECTION)
+                        # Small delay to ensure session state has the most current value
+                        import time
+                        time.sleep(0.1)
+                        
+                        # Get wind direction directly from session state
+                        user_provided_wind = st.session_state.wind_direction
+                        logger.info(f"Using user-selected wind direction as starting point: {user_provided_wind}°")
                         
                         # Use the new unified wind estimation API
                         analyzed_stretches = analyze_wind_angles(stretches.copy(), user_provided_wind)

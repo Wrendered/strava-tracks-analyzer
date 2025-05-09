@@ -68,22 +68,33 @@ def wind_direction_selector(
             </div>
             """, unsafe_allow_html=True)
         
-        # Simple wind direction slider
+        # Initialize the temporary wind direction in session state if not present
+        if "temp_wind_direction" not in st.session_state:
+            st.session_state.temp_wind_direction = round(current_wind) if current_wind is not None else 90
+        
+        # Wind direction slider that updates a temporary value without triggering recalculation
         user_wind_direction = st.slider(
             "Enter approximate wind direction", 
             min_value=0, 
             max_value=359, 
-            value=round(current_wind) if current_wind is not None else 90,
+            value=st.session_state.temp_wind_direction,
             step=1,  # Allow 1-degree increments for fine-tuning
-            key="main_wind_slider"
+            key="wind_slider_value"
         )
         
-        # Add a button to immediately apply the wind direction change
+        # Update the temporary value when slider changes
+        st.session_state.temp_wind_direction = user_wind_direction
+        
+        # Also update the main wind_direction to the slider value immediately 
+        # (but don't trigger recalculations until Apply is clicked)
+        st.session_state.wind_direction = user_wind_direction
+        
+        # Add a button to explicitly apply the wind direction change
         if st.button("🔄 Apply Wind Direction", 
                    help="Recalculate all metrics with this wind direction",
                    key="apply_wind_btn",
                    type="primary"):
-            # Call the callback if provided
+            # Call the callback only when Apply button is clicked
             if on_change_callback is not None:
                 on_change_callback(user_wind_direction)
         
