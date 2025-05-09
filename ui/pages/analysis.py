@@ -677,7 +677,14 @@ def display_page():
                 
                 cols = st.columns([3, 1])
                 with cols[0]:
-                    st.info("Use the selected segments to refine wind direction estimation")
+                    st.info("Use specific segments to refine the wind direction estimate")
+                    st.markdown("""
+                    <div style="font-size:0.9em; color: #555;">
+                        <span style="color: #0068C9;">ℹ️</span> You can select specific segments in the <strong>Advanced Selection</strong> tab 
+                        below to focus the analysis on your best tacks only. The calculation balances port and starboard tacks 
+                        and excludes suspicious angles (< 20°).
+                    </div>
+                    """, unsafe_allow_html=True)
                 
                 with cols[1]:
                     # Add re-analyze wind button using our reusable component
