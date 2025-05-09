@@ -51,35 +51,39 @@ def wind_direction_selector(
             </div>
             """, unsafe_allow_html=True)
         
-        # Initialize the temporary wind direction in session state if not present
+        # Initialize the wind direction in session state if not present
         if "temp_wind_direction" not in st.session_state:
             st.session_state.temp_wind_direction = round(current_wind) if current_wind is not None else 90
         
-        # Wind direction slider that updates a temporary value without triggering recalculation
-        user_wind_direction = st.slider(
-            "Enter approximate wind direction", 
-            min_value=0, 
-            max_value=359, 
-            value=st.session_state.temp_wind_direction,
-            step=1,  # Allow 1-degree increments for fine-tuning
-            key="wind_slider_value"
-        )
+        # Number input for fine control of wind direction
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            user_wind_direction = st.number_input(
+                "Adjust wind direction", 
+                min_value=0, 
+                max_value=359, 
+                value=int(st.session_state.temp_wind_direction),
+                step=1,  # Allow 1-degree increments for fine-tuning
+                key="wind_input_value",
+                help="Enter exact wind direction in degrees"
+            )
         
-        # Update the temporary value when slider changes
+        # Update the temporary value when input changes
         st.session_state.temp_wind_direction = user_wind_direction
         
-        # Also update the main wind_direction to the slider value immediately 
+        # Also update the main wind_direction to the input value immediately 
         # (but don't trigger recalculations until Apply is clicked)
         st.session_state.wind_direction = user_wind_direction
         
         # Add a button to explicitly apply the wind direction change
-        if st.button("🔄 Apply Wind Direction", 
-                   help="Recalculate all metrics with this wind direction",
-                   key="apply_wind_btn",
-                   type="primary"):
-            # Call the callback only when Apply button is clicked
-            if on_change_callback is not None:
-                on_change_callback(user_wind_direction)
+        with col2:
+            if st.button("🔄 Update", 
+                       help="Recalculate all metrics with this wind direction",
+                       key="apply_wind_btn",
+                       type="primary"):
+                # Call the callback only when Apply button is clicked
+                if on_change_callback is not None:
+                    on_change_callback(user_wind_direction)
         
     return user_wind_direction
 

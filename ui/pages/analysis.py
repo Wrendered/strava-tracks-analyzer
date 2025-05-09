@@ -184,24 +184,54 @@ def display_page():
         """)
     
     # File uploader and wind direction input in the main area
-    col1, col2 = st.columns([2, 1])
+    # File uploader section with initial wind direction
+    uploaded_file = st.file_uploader("Upload a GPX file", type=['gpx'], key="track_analysis_uploader")
     
-    with col1:
-        uploaded_file = st.file_uploader("Upload a GPX file", type=['gpx'], key="track_analysis_uploader")
+    # Initialize file-specific wind settings if not exists
+    if 'file_wind_settings' not in st.session_state:
+        st.session_state.file_wind_settings = {}
+    
+    # Show upload options when a file is selected but not yet processed
+    if uploaded_file is not None and ('track_data' not in st.session_state or uploaded_file.name != st.session_state.get('current_file_name')):
+        # Upload options in columns for better layout
+        col1, col2 = st.columns([1, 1])
+        with col1:
+            # Initial wind direction input for this file
+            initial_wind = st.number_input(
+                "Initial Wind Direction (°)", 
+                min_value=0, 
+                max_value=359, 
+                value=st.session_state.get('init_wind_direction', DEFAULT_WIND_DIRECTION),
+                step=5,
+                help="Set the approximate wind direction for this file before analysis"
+            )
+            # Store for use during processing
+            st.session_state.init_wind_direction = initial_wind
         
-        # Button to clear data
-        if 'track_data' in st.session_state and st.session_state.track_data is not None:
-            if st.button("Clear Current Data", key="clear_track_data"):
-                st.session_state.track_data = None
-                st.session_state.track_metrics = None
-                st.session_state.track_stretches = None
-                st.session_state.track_name = None
-                st.session_state.wind_direction = DEFAULT_WIND_DIRECTION
-                st.session_state.estimated_wind = None
-                st.rerun()
+        with col2:
+            # Process button to analyze with the selected wind direction
+            if st.button("Analyze Track", type="primary"):
+                # Will be processed below in the regular file upload section
+                pass
     
-    with col2:
-        # Use our new wind direction UI component
+    # Button to clear data - shown after a file is loaded
+    if 'track_data' in st.session_state and st.session_state.track_data is not None:
+        if st.button("Clear Current Data", key="clear_track_data"):
+            st.session_state.track_data = None
+            st.session_state.track_metrics = None
+            st.session_state.track_stretches = None
+            st.session_state.track_name = None
+            st.session_state.wind_direction = DEFAULT_WIND_DIRECTION
+            st.session_state.estimated_wind = None
+            st.session_state.current_file_name = None
+            st.rerun()
+    
+    # Wind direction adjustment section - only shown after a file is loaded
+    if 'track_data' in st.session_state and st.session_state.track_data is not None:
+        # Display current file and wind direction info
+        st.markdown(f"#### Current Track: {st.session_state.track_name}")
+        
+        # Use our improved wind direction UI component
         # Initialize wind direction if not already set
         if 'wind_direction' not in st.session_state:
             # This ensures first-time uploads will use the default
@@ -210,13 +240,28 @@ def display_page():
         # Get current values
         current_wind = st.session_state.wind_direction
         estimated_wind = st.session_state.get('estimated_wind')
+        current_file = st.session_state.get('current_file_name')
+        
+        # Store this file's wind settings if not already done
+        if current_file and current_file not in st.session_state.file_wind_settings:
+            st.session_state.file_wind_settings[current_file] = {
+                'wind_direction': current_wind,
+                'estimated_wind': estimated_wind
+            }
         
         # Use the wind direction selector component
         def on_wind_change(new_wind_direction):
             if update_wind_direction(new_wind_direction):
+                # Update this file's settings in our persistent dictionary
+                if current_file:
+                    if current_file not in st.session_state.file_wind_settings:
+                        st.session_state.file_wind_settings[current_file] = {}
+                    st.session_state.file_wind_settings[current_file]['wind_direction'] = new_wind_direction
+                
                 st.success(f"Wind direction updated to {new_wind_direction}°")
                 st.rerun()  # Force UI refresh with new angles
         
+        # Show the wind direction adjustment UI
         user_wind_direction = wind_direction_selector(
             current_wind=current_wind,
             estimated_wind=estimated_wind,
@@ -283,13 +328,12 @@ def display_page():
                     
                     # Use the user-provided wind direction as starting point
                     try:
-                        # Small delay to ensure session state has the most current value
-                        import time
-                        time.sleep(0.1)
+                        # Get initial wind direction from input during file upload
+                        user_provided_wind = st.session_state.get('init_wind_direction', DEFAULT_WIND_DIRECTION)
+                        logger.info(f"Using initial wind direction for this file: {user_provided_wind}°")
                         
-                        # Get wind direction directly from session state
-                        user_provided_wind = st.session_state.wind_direction
-                        logger.info(f"Using user-selected wind direction as starting point: {user_provided_wind}°")
+                        # Store the current file name for tracking
+                        st.session_state.current_file_name = uploaded_file.name
                         
                         # Use the new unified wind estimation API
                         analyzed_stretches = analyze_wind_angles(stretches.copy(), user_provided_wind)
