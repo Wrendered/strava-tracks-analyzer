@@ -70,6 +70,8 @@ class GearItem:
             stretches = session_state['track_stretches']
             
             # Split into upwind/downwind for analysis
+            # IMPORTANT: Speeds in stretches DataFrame are already in knots
+            # They were converted from m/s in core/segments.py
             if not stretches.empty:
                 upwind = stretches[stretches['angle_to_wind'] < 90]
                 downwind = stretches[stretches['angle_to_wind'] >= 90]
@@ -84,7 +86,7 @@ class GearItem:
                         best_port = port_upwind.loc[port_upwind['angle_to_wind'].idxmin()]
                         best_port_upwind = {
                             "angle": best_port['angle_to_wind'],
-                            "speed": best_port['speed'] * 1.94384  # Convert m/s to knots
+                            "speed": best_port['speed']  # Speed is already in knots in the UI
                         }
                     
                     # Find best starboard tack upwind angle
@@ -92,7 +94,7 @@ class GearItem:
                         best_starboard = starboard_upwind.loc[starboard_upwind['angle_to_wind'].idxmin()]
                         best_starboard_upwind = {
                             "angle": best_starboard['angle_to_wind'],
-                            "speed": best_starboard['speed'] * 1.94384  # Convert m/s to knots
+                            "speed": best_starboard['speed']  # Speed is already in knots in the UI
                         }
                     
                     # Calculate upwind progress speed when we have both tacks
@@ -118,7 +120,7 @@ class GearItem:
                         best_port = port_downwind.loc[port_downwind['angle_to_wind'].idxmax()]
                         best_port_downwind = {
                             "angle": best_port['angle_to_wind'],
-                            "speed": best_port['speed'] * 1.94384  # Convert m/s to knots
+                            "speed": best_port['speed']  # Speed is already in knots in the UI
                         }
                     
                     # Find best starboard tack downwind angle
@@ -126,7 +128,7 @@ class GearItem:
                         best_starboard = starboard_downwind.loc[starboard_downwind['angle_to_wind'].idxmax()]
                         best_starboard_downwind = {
                             "angle": best_starboard['angle_to_wind'],
-                            "speed": best_starboard['speed'] * 1.94384  # Convert m/s to knots
+                            "speed": best_starboard['speed']  # Speed is already in knots in the UI
                         }
         
         # Get average angles if available in session state
