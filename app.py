@@ -1,5 +1,5 @@
 """
-WingWizard - Strava Tracks Analyzer
+Foil Lab - Wingfoil GPX Track Analyzer
 
 Main entry point for the Streamlit application.
 """
@@ -82,8 +82,20 @@ def main():
     </style>
     """, unsafe_allow_html=True)
     
-    # Main title with emoji and creative name
-    st.title("🪂 WingWizard")
+    # Main title with emoji and updated name
+    st.title("🪂 Foil Lab")
+    
+    # Shorter introduction banner 
+    st.markdown("""
+    <div style="padding: 10px; background-color: rgba(0, 104, 201, 0.07); border-radius: 8px; margin-bottom: 15px;">
+        <p style="margin: 0; font-size: 0.95rem;">
+            A prototype built in my spare time to analyze upwind performance from your GPX tracks. 
+            Expect quirks, breakage, and the occasional bug — and please send feedback to my Instagram: 
+            <a href="https://www.instagram.com/heart_wrench/" target="_blank" style="font-weight: 500;">@heart_wrench</a>. 
+            Sharing because I love this sport and data too much to keep it to myself.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
     
     # Initialize session state for navigation and data persistence
     if 'page' not in st.session_state:
@@ -92,10 +104,10 @@ def main():
     # Create tabs-based navigation at the top of the page
     selected_tab = st.radio(
         "Navigation",
-        ["📚 Guide", "📊 Track Analysis", "🔄 Gear Comparison"],
+        ["📚 About", "📊 Track Analysis", "🔄 Gear Comparison"],
         horizontal=True,
         label_visibility="collapsed",
-        index=1 if st.session_state.page == "Track Analysis" else (0 if st.session_state.page == "Guide" else 2)
+        index=1 if st.session_state.page == "Track Analysis" else (0 if st.session_state.page == "About" else 2)
     )
     
     # Update session state based on selected tab
@@ -104,18 +116,133 @@ def main():
     elif selected_tab == "🔄 Gear Comparison":
         st.session_state.page = "Gear Comparison"
     else:
-        st.session_state.page = "Guide"
+        st.session_state.page = "About"
     
     # Display content based on the selected page
     if st.session_state.page == "Track Analysis":
         display_analysis_page()
     elif st.session_state.page == "Gear Comparison":
-        st.write("Gear Comparison page is under refactoring...")
-        # We'll add this back when it's refactored: gear_comparison()
+        st.header("🔄 Gear Comparison")
+        
+        # Coming soon message with visual styling
+        st.markdown("""
+        <div style="text-align: center; padding: 30px; background-color: #f8f9fa; border-radius: 8px; margin: 20px 0;">
+            <img src="https://img.icons8.com/fluency/96/000000/maintenance.png" style="width: 70px; height: 70px; margin-bottom: 15px;">
+            <h2 style="margin-top: 0;">Coming Soon!</h2>
+            <p style="font-size: 1.1rem; margin-bottom: 20px;">
+                The Gear Comparison feature is currently under development.
+            </p>
+            <p style="font-size: 0.9rem; color: #666; max-width: 500px; margin: 0 auto 15px auto;">
+                This feature will allow you to compare your performance across different equipment setups,
+                helping you optimize your gear choices for various conditions.
+            </p>
+            <div style="background-color: rgba(0, 104, 201, 0.07); padding: 10px; border-radius: 6px; max-width: 450px; margin: 0 auto;">
+                <p style="font-style: italic; margin: 0;">
+                    Have specific gear comparison features you'd like to see?<br>
+                    Let me know on Instagram: <a href="https://www.instagram.com/heart_wrench/" target="_blank">@heart_wrench</a>
+                </p>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
     else:
-        # Guide page
-        st.write("Guide page is under refactoring...")
-        # We'll add this back when it's refactored: display_guide()
+        # About page with instructions and features
+        st.header("📚 About Foil Lab")
+        
+        # About section with longer explanation
+        st.markdown("""
+        <div style="padding: 15px; background-color: rgba(0, 104, 201, 0.07); border-radius: 8px; margin-bottom: 25px;">
+            <p style="font-size: 1.1rem; line-height: 1.5;">
+                Foil Lab is a side project I made to help understand how different gear, wind conditions, and technique affect upwind performance. 
+                You can upload GPX tracks (like from Strava), and the tool will give you a breakdown of wind angles, tack symmetry, and more.
+            </p>
+            <p style="font-size: 1.1rem; line-height: 1.5; margin-top: 15px;">
+                It's not perfect — just a prototype I built in my spare time out of curiosity and obsession. 
+                You might find bugs or quirks (you definitely will). But if you do, or if you have ideas for improvement, 
+                I'd love to hear from you. Message me on Instagram: 
+                <a href="https://www.instagram.com/heart_wrench/" target="_blank">@heart_wrench</a>.
+            </p>
+            <p style="font-size: 1.1rem; line-height: 1.5; margin-top: 15px;">
+                This isn't a commercial project. It's a tool I wish existed, so I built it — and I'm sharing it in the spirit of 
+                learning, improvement, and foil-nerdery. 💨
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Step-by-step guide with visual formatting
+        st.markdown("""
+        <div style="padding: 0 10px;">
+            <h3>Getting Started</h3>
+            <div style="display: flex; align-items: flex-start; margin-bottom: 20px;">
+                <div style="background-color: #0068C9; color: white; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; margin-right: 15px; flex-shrink: 0; margin-top: 3px;">1</div>
+                <div>
+                    <strong style="font-size: 1.1rem;">Export Your GPS Track</strong>
+                    <p>Download your activity as a GPX file from Strava or your GPS device.</p>
+                    <p style="font-size: 0.9rem; color: #666;">
+                        In Strava: Open an activity → Click the "..." button → Select "Export GPX"
+                    </p>
+                </div>
+            </div>
+            
+            <div style="display: flex; align-items: flex-start; margin-bottom: 20px;">
+                <div style="background-color: #0068C9; color: white; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; margin-right: 15px; flex-shrink: 0; margin-top: 3px;">2</div>
+                <div>
+                    <strong style="font-size: 1.1rem;">Upload to Foil Lab</strong>
+                    <p>Go to the Track Analysis tab and upload your GPX file.</p>
+                    <p style="font-size: 0.9rem; color: #666;">
+                        Enter your best estimate of the wind direction during your session.
+                    </p>
+                </div>
+            </div>
+            
+            <div style="display: flex; align-items: flex-start; margin-bottom: 20px;">
+                <div style="background-color: #0068C9; color: white; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; margin-right: 15px; flex-shrink: 0; margin-top: 3px;">3</div>
+                <div>
+                    <strong style="font-size: 1.1rem;">Analyze Your Performance</strong>
+                    <p>Review your tracks, sailing angles, and performance data.</p>
+                    <p style="font-size: 0.9rem; color: #666;">
+                        The polar plot shows your speed at different angles to the wind.
+                    </p>
+                </div>
+            </div>
+            
+            <div style="display: flex; align-items: flex-start; margin-bottom: 20px;">
+                <div style="background-color: #0068C9; color: white; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; margin-right: 15px; flex-shrink: 0; margin-top: 3px;">4</div>
+                <div>
+                    <strong style="font-size: 1.1rem;">Fine-tune Wind Direction</strong>
+                    <p>Adjust the wind direction if needed to match your actual session conditions.</p>
+                    <p style="font-size: 0.9rem; color: #666;">
+                        The app will calculate a session average wind direction based on your sailing patterns.
+                    </p>
+                </div>
+            </div>
+        </div>
+        
+        <div style="margin-top: 30px;">
+            <h3>Current Features</h3>
+            <ul>
+                <li><strong>Track Visualization</strong> - See your route with color-coded speed segments</li>
+                <li><strong>Segment Analysis</strong> - Break down your session into consistent sailing segments</li>
+                <li><strong>Wind Direction Estimation</strong> - Calculate the average wind direction from your sailing patterns</li>
+                <li><strong>Polar Performance Plot</strong> - Visualize your speed at different angles to the wind</li>
+                <li><strong>Upwind/Downwind Analysis</strong> - See your best angles and speeds on each tack</li>
+                <li><strong>Performance Metrics</strong> - Get insights on your sailing efficiency</li>
+            </ul>
+        </div>
+        
+        <div style="margin-top: 30px; padding: 15px; background-color: #f8f9fa; border-radius: 8px;">
+            <h3>Upcoming Features</h3>
+            <p>These features are in development and coming soon:</p>
+            <ul>
+                <li><strong>Gear Comparison</strong> - Compare performance across different equipment setups</li>
+                <li><strong>Progress Tracking</strong> - Monitor your improvement over time</li>
+                <li><strong>Automated Insights</strong> - Get personalized tips based on your sailing patterns</li>
+                <li><strong>Session Highlights</strong> - Identify your fastest runs and best maneuvers</li>
+            </ul>
+            <p style="font-size: 0.9rem; font-style: italic; margin-top: 10px;">
+                Have a feature you'd like to see? Contact me on Instagram <a href="https://www.instagram.com/heart_wrench/" target="_blank">@heart_wrench</a>!
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
     
     logger.info(f"App started - {st.session_state.page} page")
 

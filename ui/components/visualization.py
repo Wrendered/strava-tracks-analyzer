@@ -1,5 +1,5 @@
 """
-Data visualization components for the WingWizard app.
+Data visualization components for the Foil Lab app.
 
 This module contains functions for visualizing track data, segments,
 and wind analysis.

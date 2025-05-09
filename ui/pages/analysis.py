@@ -198,6 +198,11 @@ def display_page():
     if 'file_wind_settings' not in st.session_state:
         st.session_state.file_wind_settings = {}
     
+    # Prevent uploading new file without clearing current data first
+    if 'track_data' in st.session_state and st.session_state.track_data is not None and uploaded_file is not None and uploaded_file.name != st.session_state.get('current_file_name'):
+        st.warning("Please clear the current data before uploading a new file.")
+        uploaded_file = None  # Reset the uploader
+
     # Show upload options when a file is selected but not yet processed
     if uploaded_file is not None and ('track_data' not in st.session_state or uploaded_file.name != st.session_state.get('current_file_name')):
         st.info("👉 Please set your estimated wind direction and click 'Analyze Track' to process this file. We'll use this to calculate the session's average wind direction.")
@@ -245,9 +250,9 @@ def display_page():
         # Reset confirmation flag when no new file is selected
         st.session_state.analyze_confirmed = False
     
-    # Button to clear data - shown after a file is loaded
+    # Button to clear data - shown after a file is loaded and highlighted to encourage use before uploading new files
     if 'track_data' in st.session_state and st.session_state.track_data is not None:
-        if st.button("Clear Current Data", key="clear_track_data"):
+        if st.button("Clear Current Data", key="clear_track_data", type="primary"):
             st.session_state.track_data = None
             st.session_state.track_metrics = None
             st.session_state.track_stretches = None
@@ -430,15 +435,17 @@ def display_page():
                 <div style="font-size: 1.5rem; margin-right: 10px;">📋</div>
                 <div>
                     <strong>Using previously loaded data:</strong> {track_name}<br>
-                    <span style="font-size: 0.9rem;">Make sure the wind direction is correct for accurate analysis!</span>
+                    <span style="font-size: 0.9rem;">Use "Clear Current Data" button above to upload a different file.</span>
                 </div>
             </div>
         </div>
         """, unsafe_allow_html=True)
         
-        # Draw attention to the wind direction slider
-        st.info("👉 Verify the wind direction setting to get accurate results.")
+        # No need for additional info message as the blue box already provides guidance
     else:
+        # Clear any remaining file in the uploader
+        if uploaded_file is not None:
+            uploaded_file = None
         gpx_data = pd.DataFrame()
     
     # Display track analysis if we have data
@@ -712,4 +719,11 @@ def display_page():
         else:
             st.warning("No segments meet minimum speed criteria. Try adjusting the speed and angle parameters.")
     else:
-        st.info("Please upload a GPX file to begin analysis.")
+        # Display a more helpful instruction message
+        st.markdown("""
+        <div style="text-align: center; padding: 20px; background-color: #f8f9fa; border-radius: 10px; margin-top: 30px;">
+            <h3>📤 Upload a GPX Track File</h3>
+            <p>Select a GPX file from your Strava downloads or other GPS device to analyze your wingfoil session.</p>
+            <p style="font-size: 0.9rem; color: #666;">The analysis will show you wind angles, speed patterns, and performance metrics for your session.</p>
+        </div>
+        """, unsafe_allow_html=True)
