@@ -1,6 +1,8 @@
-# Strava Tracks Analyzer
+# WingWizard - Strava Tracks Analyzer
 
 A Streamlit application for analyzing wingfoil sessions from Strava GPX tracks. Helps analyze your sailing performance and optimize wind angles.
+
+> **Note**: This project has been refactored to improve code organization and maintainability. See [ARCHITECTURE.md](ARCHITECTURE.md) and [REFACTORING.md](REFACTORING.md) for details on the new structure.
 
 ## Features
 
@@ -8,7 +10,8 @@ A Streamlit application for analyzing wingfoil sessions from Strava GPX tracks. 
 - Automatically detect consistent sailing angles and segments
 - Calculate optimal upwind and downwind angles
 - Visualize performance with interactive maps and polar diagrams
-- Optional auto-detection of wind direction based on sailing patterns
+- Advanced wind direction estimation with confidence levels
+- Separate port and starboard tack analysis
 - Compare different gear setups (board, foil, wing combinations)
 - AI-powered gear comparison analysis with Claude
 - Export analysis as CSV for further processing
@@ -52,3 +55,24 @@ You'll need an Anthropic API key to use this feature. You can set it two ways:
 - scikit-learn
 - geopy
 - anthropic
+
+## Project Structure
+
+The project follows a clean architecture with clear separation of concerns:
+
+```
+strava-tracks-analyzer/
+├── app.py                   # Main Streamlit entry point
+├── config/                  # Configuration files
+├── core/                    # Core business logic 
+│   ├── gpx.py               # GPX file parsing
+│   ├── metrics.py           # Track metrics calculations
+│   ├── segments.py          # Segment detection and analysis
+│   └── wind/                # Wind direction analysis
+├── ui/                      # UI components and pages
+│   ├── pages/               # Main UI pages
+│   └── components/          # Reusable UI components
+└── utils/                   # Utility functions
+```
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for more details on the project structure.
