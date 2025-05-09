@@ -464,26 +464,17 @@ def display_page():
         with cols[0]:
             st.markdown("### 📌 Track Overview")
         
-        # Add export to comparison option in a button in the right column
+        # Add export to comparison option - always displayed
         if metrics:
             with cols[1]:
-                if st.button("🔄 Export to Comparison", type="primary", use_container_width=True, help="Export this track's data to the Gear Comparison page"):
-                    # Set a flag to show the export form
-                    st.session_state.show_export_form = True
-                    st.rerun()
+                st.markdown("**🔄 Export to Comparison**", help="Export this track's data to the Gear Comparison page")
             
-            # Show export form if the flag is set
-            if st.session_state.get('show_export_form', False):
-                # Save the angle results in session state for export
-                angle_results = calculate_average_angle_from_segments(stretches)
-                st.session_state.angle_results = angle_results
-                
-                # Show export form and handle submission
-                export_id = export_to_comparison_button(metrics, stretches)
-                
-                # If export was successful, clear the flag
-                if export_id:
-                    st.session_state.show_export_form = False
+            # Save the angle results in session state for export
+            angle_results = calculate_average_angle_from_segments(stretches)
+            st.session_state.angle_results = angle_results
+            
+            # Show export form directly without requiring an initial button click
+            export_id = export_to_comparison_button(metrics, stretches)
         
         with st.container(border=True):
             # Create a modern track summary layout
