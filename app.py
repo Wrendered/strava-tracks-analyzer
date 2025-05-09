@@ -151,68 +151,76 @@ def main():
         st.markdown("""
         <div style="padding: 0 10px;">
             <h3>Getting Started</h3>
-            <div style="display: flex; align-items: flex-start; margin-bottom: 20px;">
-                <div style="background-color: #0068C9; color: white; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; margin-right: 15px; flex-shrink: 0; margin-top: 3px;">1</div>
-                <div>
-                    <strong style="font-size: 1.1rem;">Export Your GPS Track</strong>
-                    <p>Download your activity as a GPX file from Strava or your GPS device.</p>
-                    <p style="font-size: 0.9rem; color: #666;">
-                        In Strava: Open an activity → Click the "..." button → Select "Export GPX"
-                    </p>
-                </div>
-            </div>
-            
-            <div style="display: flex; align-items: flex-start; margin-bottom: 20px;">
-                <div style="background-color: #0068C9; color: white; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; margin-right: 15px; flex-shrink: 0; margin-top: 3px;">2</div>
-                <div>
-                    <strong style="font-size: 1.1rem;">Upload to Foil Lab</strong>
-                    <p>Go to the Track Analysis tab and upload your GPX file.</p>
-                    <p style="font-size: 0.9rem; color: #666;">
-                        Enter your best estimate of the wind direction during your session.
-                    </p>
-                </div>
-            </div>
-            
-            <div style="display: flex; align-items: flex-start; margin-bottom: 20px;">
-                <div style="background-color: #0068C9; color: white; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; margin-right: 15px; flex-shrink: 0; margin-top: 3px;">3</div>
-                <div>
-                    <strong style="font-size: 1.1rem;">Analyze Your Performance</strong>
-                    <p>Review your tracks, sailing angles, and performance data.</p>
-                    <p style="font-size: 0.9rem; color: #666;">
-                        The polar plot shows your speed at different angles to the wind.
-                    </p>
-                </div>
-            </div>
-            
-            <div style="display: flex; align-items: flex-start; margin-bottom: 20px;">
-                <div style="background-color: #0068C9; color: white; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; margin-right: 15px; flex-shrink: 0; margin-top: 3px;">4</div>
-                <div>
-                    <strong style="font-size: 1.1rem;">Fine-tune Wind Direction</strong>
-                    <p>Adjust the wind direction if needed to match your actual session conditions.</p>
-                    <p style="font-size: 0.9rem; color: #666;">
-                        The app will calculate a session average wind direction based on your sailing patterns.
-                    </p>
-                </div>
-            </div>
         </div>
+        """, unsafe_allow_html=True)
         
-        <div style="margin-top: 30px;">
-            <h3>Current Features</h3>
-            <ul>
-                <li><strong>Track Visualization</strong> - See your route with color-coded speed segments</li>
-                <li><strong>Segment Analysis</strong> - Break down your session into consistent sailing segments</li>
-                <li><strong>Wind Direction Estimation</strong> - Calculate the average wind direction from your sailing patterns</li>
-                <li><strong>Polar Performance Plot</strong> - Visualize your speed at different angles to the wind</li>
-                <li><strong>Upwind/Downwind Analysis</strong> - See your best angles and speeds on each tack</li>
-                <li><strong>Performance Metrics</strong> - Get insights on your sailing efficiency</li>
-            </ul>
-        </div>
+        # Step 1
+        col1, col2 = st.columns([1, 8])
+        with col1:
+            st.markdown('<div style="background-color: #0068C9; color: white; border-radius: 50%; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; font-weight: bold;">1</div>', unsafe_allow_html=True)
+        with col2:
+            st.markdown('<strong style="font-size: 1.1rem;">Export Your GPS Track</strong>', unsafe_allow_html=True)
+            st.write("Download your activity as a GPX file from Strava or your GPS device.")
+            st.caption("In Strava: Open an activity → Click the \"...\" button → Select \"Export GPX\"")
         
+        # Step 2
+        col1, col2 = st.columns([1, 8])
+        with col1:
+            st.markdown('<div style="background-color: #0068C9; color: white; border-radius: 50%; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; font-weight: bold;">2</div>', unsafe_allow_html=True)
+        with col2:
+            st.markdown('<strong style="font-size: 1.1rem;">Upload to Foil Lab</strong>', unsafe_allow_html=True)
+            st.write("Go to the Track Analysis tab and upload your GPX file.")
+            st.caption("Enter your best estimate of the wind direction during your session.")
+        
+        # Step 3
+        col1, col2 = st.columns([1, 8])
+        with col1:
+            st.markdown('<div style="background-color: #0068C9; color: white; border-radius: 50%; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; font-weight: bold;">3</div>', unsafe_allow_html=True)
+        with col2:
+            st.markdown('<strong style="font-size: 1.1rem;">Analyze Your Performance</strong>', unsafe_allow_html=True)
+            st.write("Review your tracks, sailing angles, and performance data.")
+            st.caption("The polar plot shows your speed at different angles to the wind.")
+        
+        # Step 4
+        col1, col2 = st.columns([1, 8])
+        with col1:
+            st.markdown('<div style="background-color: #0068C9; color: white; border-radius: 50%; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; font-weight: bold;">4</div>', unsafe_allow_html=True)
+        with col2:
+            st.markdown('<strong style="font-size: 1.1rem;">Fine-tune Wind Direction</strong>', unsafe_allow_html=True)
+            st.write("Adjust the wind direction if needed to match your actual session conditions.")
+            st.caption("The app will calculate a session average wind direction based on your sailing patterns.")
+        
+        # Step 5 - New step for gear comparison
+        col1, col2 = st.columns([1, 8])
+        with col1:
+            st.markdown('<div style="background-color: #0068C9; color: white; border-radius: 50%; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; font-weight: bold;">5</div>', unsafe_allow_html=True)
+        with col2:
+            st.markdown('<strong style="font-size: 1.1rem;">Compare Different Gear Setups</strong>', unsafe_allow_html=True)
+            st.write("Export your analyzed tracks to the Gear Comparison page.")
+            st.caption("Compare multiple tracks to see how different equipment performs in various conditions.")
+        
+        # Current Features
+        st.markdown("<h3>Current Features</h3>", unsafe_allow_html=True)
+        
+        features = [
+            ("Track Visualization", "See your route with color-coded speed segments"),
+            ("Segment Analysis", "Break down your session into consistent sailing segments"),
+            ("Wind Direction Estimation", "Calculate the average wind direction from your sailing patterns"),
+            ("Polar Performance Plot", "Visualize your speed at different angles to the wind"),
+            ("Upwind/Downwind Analysis", "See your best angles and speeds on each tack"),
+            ("Performance Metrics", "Get insights on your sailing efficiency"),
+            ("Gear Comparison", "Compare performance across different equipment setups")
+        ]
+        
+        for feature, description in features:
+            st.markdown(f"* **{feature}** - {description}")
+        
+        # Upcoming Features
+        st.markdown("""
         <div style="margin-top: 30px; padding: 15px; background-color: #f8f9fa; border-radius: 8px;">
             <h3>Upcoming Features</h3>
             <p>These features are in development and coming soon:</p>
             <ul>
-                <li><strong>Gear Comparison</strong> - Compare performance across different equipment setups</li>
                 <li><strong>Progress Tracking</strong> - Monitor your improvement over time</li>
                 <li><strong>Automated Insights</strong> - Get personalized tips based on your sailing patterns</li>
                 <li><strong>Session Highlights</strong> - Identify your fastest runs and best maneuvers</li>
