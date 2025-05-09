@@ -157,51 +157,18 @@ def display_page():
 
         min_speed_ms = min_speed * 0.514444  # Convert knots to m/s
         
-        # Advanced options
-        st.subheader("Advanced Options")
-        advanced_mode = st.checkbox("Advanced Mode", value=False, 
-                                   help="Enable advanced features like wind estimation method selection")
-        
-        if advanced_mode:
-            st.info("""
-            **Advanced Mode gives you access to:**
-            - Wind estimation method selection
-            - Additional analysis options
-            - Fine-tuning of algorithm parameters
-            """, icon="ℹ️")
-        
-        # Always show suspicious angle threshold - this is important for accurate analysis
+        # Technical parameter - but important for accurate analysis
         # Default to 20 degrees - below this is usually not physically possible
         suspicious_angle_threshold = st.slider(
-            "Suspicious Angle Threshold (°)", 
+            "Minimum Sailing Angle (°)", 
             min_value=15, 
             max_value=35, 
             value=st.session_state.get('suspicious_angle_threshold', DEFAULT_SUSPICIOUS_ANGLE_THRESHOLD),
-            help="Angles closer to wind than this are considered suspicious and excluded from wind direction estimation (20° recommended)"
+            help="Angles closer to wind than this are considered physically impossible and excluded from wind direction estimation (20° recommended)"
         )
         
         # Update the threshold in session state
         st.session_state.suspicious_angle_threshold = suspicious_angle_threshold
-        
-        if advanced_mode:
-            wind_estimation_method = st.radio(
-                "Wind Estimation Method",
-                ["Simple", "Complex"],
-                index=0,
-                help="Choose the algorithm for wind direction estimation"
-            )
-            
-            st.caption("""
-            **Simple Method:** Works best for real-world tracks. Analyzes what angles you sailed and finds the most 
-            consistent wind direction to explain them. Preferred for most situations.
-            
-            **Complex Method:** Uses a more sophisticated algorithm that works well for synthetic or 
-            "perfect" data but can be less reliable with real tracks.
-            """)
-            
-            use_simple_method = wind_estimation_method == "Simple"
-        else:
-            use_simple_method = True  # Default to simple method
             
         # Add wind angle explanation at the bottom of the sidebar
         st.divider()
