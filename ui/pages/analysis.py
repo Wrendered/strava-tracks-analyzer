@@ -238,33 +238,29 @@ def display_page():
                 st.rerun()
     
     with col2:
-        # Wind direction guide in main area for first-time users
-        with st.container(border=True):
-            st.markdown("### Wind Direction")
-            st.markdown("""
-            **Wind direction is where the wind is coming FROM:**
-            
-            0° (N): North ⬇️ | 90° (E): East ⬅️  
-            180° (S): South ⬆️ | 270° (W): West ➡️
-            """)
-            
-            # Simple wind direction slider
-            user_wind_direction = st.slider(
-                "Enter approximate wind direction", 
-                min_value=0, 
-                max_value=359, 
-                value=round(st.session_state.get('wind_direction', DEFAULT_WIND_DIRECTION)) if st.session_state.get('wind_direction') is not None else DEFAULT_WIND_DIRECTION,
-                step=1,  # Allow 1-degree increments for fine-tuning
-                key="main_wind_slider"
-            )
-            
-            # Add a button to apply the wind direction change
-            if st.button("🔄 Apply Wind Direction", help="Recalculate all metrics with this wind direction"):
-                # Use our central function to update wind direction and all calculations
-                # This will update session state and recalculate stretches
-                if update_wind_direction(user_wind_direction):
-                    st.success(f"Wind direction updated to {user_wind_direction}°")
-                    st.rerun() # Force UI refresh with new angles
+        # Use our new wind direction UI component
+        current_wind = st.session_state.get('wind_direction', DEFAULT_WIND_DIRECTION)
+        estimated_wind = st.session_state.get('estimated_wind')
+        estimate_confidence = None
+        
+        # Get confidence level if available
+        if 'wind_estimate' in st.session_state:
+            estimate_data = st.session_state.wind_estimate
+            if isinstance(estimate_data, dict) and 'confidence' in estimate_data:
+                estimate_confidence = estimate_data['confidence']
+        
+        # Use the wind direction selector component
+        def on_wind_change(new_wind_direction):
+            if update_wind_direction(new_wind_direction):
+                st.success(f"Wind direction updated to {new_wind_direction}°")
+                st.rerun()  # Force UI refresh with new angles
+        
+        user_wind_direction = wind_direction_selector(
+            current_wind=current_wind,
+            estimated_wind=estimated_wind,
+            estimate_confidence=estimate_confidence,
+            on_change_callback=on_wind_change
+        )
     
     # Process new file upload
     if uploaded_file is not None:
@@ -628,13 +624,30 @@ def display_page():
                 # Advanced segment selection with checkboxes
                 segment_selection_checkboxes(display_df)
             
-            # Add average angles at the bottom after all tabs
+            # Add wind re-estimation button and average angles at the bottom after all tabs
             if selected_segments and len(selected_segments) > 0:
                 filtered_stretches = stretches.loc[stretches.index.isin(selected_segments)]
             else:
                 filtered_stretches = stretches
             
             if len(filtered_stretches) > 0:
+                # Add wind re-estimation button
+                st.subheader("🧭 Wind Analysis Based on Selected Segments")
+                
+                cols = st.columns([3, 1])
+                with cols[0]:
+                    st.info("Use the selected segments to refine wind direction estimation")
+                
+                with cols[1]:
+                    # Add re-analyze wind button using our reusable component
+                    reestimate_wind_button(
+                        stretches=filtered_stretches,
+                        current_wind=wind_direction,
+                        suspicious_angle_threshold=suspicious_angle_threshold,
+                        on_success_callback=update_wind_direction
+                    )
+                
+                # Show average angles
                 angle_results = calculate_average_angle_from_segments(filtered_stretches)
                 
                 with st.expander("Average Angles Details", expanded=False):
