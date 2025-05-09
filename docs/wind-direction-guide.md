@@ -1,6 +1,6 @@
-# Wind Direction Guide for WingWizard
+# Wind Direction Guide for Foil Lab
 
-This guide explains how WingWizard calculates and uses wind direction in your track analysis.
+This guide explains how Foil Lab calculates and uses wind direction in your track analysis.
 
 ## Why Wind Direction Matters
 

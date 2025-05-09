@@ -1,6 +1,6 @@
-# WingWizard Architecture
+# Foil Lab Architecture
 
-This document outlines the architecture of the WingWizard application after the refactoring.
+This document outlines the architecture of the Foil Lab application.
 
 ## Directory Structure
 

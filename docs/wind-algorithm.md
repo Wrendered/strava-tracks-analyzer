@@ -1,6 +1,6 @@
 # Simplified Wind Direction Algorithm
 
-This document explains the simplified wind direction estimation algorithm used in WingWizard.
+This document explains the simplified wind direction estimation algorithm used in Foil Lab.
 
 ## Algorithm Overview
 

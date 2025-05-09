@@ -2,7 +2,7 @@
 
 A Streamlit application for analyzing wingfoil sessions from Strava GPX tracks. Helps analyze your sailing performance and optimize wind angles.
 
-> **Note**: See [the docs directory](docs/) for detailed documentation about the application architecture and features.
+> **Note**: This documentation provides detailed information about the application architecture and features.
 
 ## Features
 
