@@ -200,7 +200,7 @@ def display_page():
     
     # Show upload options when a file is selected but not yet processed
     if uploaded_file is not None and ('track_data' not in st.session_state or uploaded_file.name != st.session_state.get('current_file_name')):
-        st.info("👉 Please set the initial wind direction and click 'Analyze Track' to process this file.")
+        st.info("👉 Please set your estimated wind direction and click 'Analyze Track' to process this file. We'll use this to calculate the session's average wind direction.")
         
         # Add direction reference
         st.markdown("""
@@ -221,12 +221,12 @@ def display_page():
         with col1:
             # Initial wind direction input for this file
             initial_wind = st.number_input(
-                "Initial Wind Direction (°)", 
+                "Estimated Wind Direction (°)", 
                 min_value=0, 
                 max_value=359, 
                 value=st.session_state.get('init_wind_direction', DEFAULT_WIND_DIRECTION),
                 step=5,
-                help="Set the approximate wind direction for this file before analysis"
+                help="Set your best estimate of the wind direction - we'll use this to calculate a more accurate session average"
             )
             # Store for use during processing
             st.session_state.init_wind_direction = initial_wind
@@ -405,10 +405,10 @@ def display_page():
                 
                 # When loading completes, provide feedback about wind direction
                 if 'estimated_wind' in st.session_state and st.session_state.estimated_wind is not None:
-                    st.success(f"✅ File loaded successfully! Average wind direction calculated to be {st.session_state.wind_direction:.1f}°.")
+                    st.success(f"✅ File loaded successfully! Session average wind direction calculated to be {st.session_state.wind_direction:.1f}° based on your sailing patterns.")
                 else:
-                    st.success("✅ File loaded successfully! Now set the wind direction →")
-                    st.info("👉 Set the wind direction slider to the approximate wind direction from your session (where the wind is coming FROM).")
+                    st.success("✅ File loaded successfully! Now set your wind direction estimate →")
+                    st.info("👉 Enter your best estimate of the wind direction from your session. This will help us analyze your performance at different sailing angles.")
             except Exception as e:
                 logger.error(f"Error loading GPX file: {e}")
                 st.error(f"Error loading GPX file: {e}")

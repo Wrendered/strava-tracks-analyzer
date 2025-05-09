@@ -69,7 +69,8 @@ def wind_direction_selector(
         if estimated_wind is not None:
             st.markdown(f"""
             <div style="padding: 5px 10px; background-color: rgba(0,0,0,0.05); border-radius: 5px; margin-bottom: 10px;">
-                Calculated wind direction: {estimated_wind:.1f}°
+                <strong>Session Average Wind Direction:</strong> {estimated_wind:.1f}°<br>
+                <span style="font-size: 0.85rem; color: #555;">Calculated from all your tacks and sailing angles</span>
             </div>
             """, unsafe_allow_html=True)
         
@@ -81,13 +82,13 @@ def wind_direction_selector(
         col1, col2 = st.columns([3, 1])
         with col1:
             user_wind_direction = st.number_input(
-                "Adjust wind direction", 
+                "Adjust Wind Direction", 
                 min_value=0, 
                 max_value=359, 
                 value=int(st.session_state.temp_wind_direction),
                 step=1,  # Allow 1-degree increments for fine-tuning
                 key="wind_input_value",
-                help="Enter exact wind direction in degrees"
+                help="Fine-tune the session average wind direction if needed"
             )
         
         # Update the temporary value when input changes
