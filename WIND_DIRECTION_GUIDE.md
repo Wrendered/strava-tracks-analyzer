@@ -16,7 +16,8 @@ Accurate wind direction is **critical** for wingfoil analysis because:
 1. When you upload a track, use the slider in the Wind Direction panel
 2. Enter your **approximate** wind direction from memory (where wind was coming FROM)
 3. The app will refine this estimate based on your track data
-4. You can always re-analyze the wind direction with the "Re-analyze Wind Direction" button
+4. You can always re-adjust using the slider and clicking "Apply Wind Direction"
+5. You can also re-analyze selected segments with the "Re-analyze Wind Direction" button
 
 ## Cardinal Directions Reference
 
@@ -24,6 +25,15 @@ Accurate wind direction is **critical** for wingfoil analysis because:
 - **90° (E)**: Wind coming from East (blowing West) ⬅️
 - **180° (S)**: Wind coming from South (blowing North) ⬆️
 - **270° (W)**: Wind coming from West (blowing East) ➡️
+
+## Understanding Confidence Levels
+
+WingWizard shows confidence in wind direction estimates:
+
+- **High Confidence (✅)**: Strong evidence based on multiple consistent segments
+- **Medium Confidence (✓)**: Good evidence but with some variations
+- **Low Confidence (⚠️)**: Limited evidence with inconsistencies
+- **No Confidence (❓)**: Insufficient data, falling back to user-provided direction
 
 ## How Wind Direction Estimation Works
 
@@ -40,6 +50,16 @@ The algorithm specifically looks for:
 - Realistic upwind angles (typically 30-45°)
 - Consistent sailing patterns across the session
 - Statistical clustering of your bearings
+
+## Sailing Angles Explained
+
+Sailing angles are always measured relative to the wind direction:
+
+- **0°**: Directly into the wind (impossible to sail)
+- **30-50°**: Close-hauled (sailing as close to the wind as possible)
+- **90°**: Beam reach (wind from the side)
+- **120-150°**: Broad reach (wind from behind at an angle)
+- **180°**: Running (wind directly behind)
 
 ## Tips for Accurate Analysis
 
@@ -64,5 +84,6 @@ Remember that wind direction is where the wind is coming FROM, not going to!
 - **Very asymmetric tacks** might mean the wind direction is off
 - **Inconsistent results** could indicate shifting winds during your session
 - **Too few segments** may not provide enough data for reliable wind estimation
+- **Slider recalculating immediately** - You can always click "Apply Wind Direction" to finalize your setting
 
 For best results, sail both upwind and downwind on both port and starboard tacks during your session!
