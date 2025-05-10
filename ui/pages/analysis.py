@@ -175,7 +175,7 @@ def display_page():
         st.divider()
         st.subheader("Wind Angle Explanation")
         st.markdown("""
-        <div style="padding: 8px; background-color: #f0f2f6; border-radius: 4px;">
+        <div style="padding: 8px; background-color: var(--secondary-background-color, #f0f2f6); color: var(--text-color, #262730); border-radius: 4px;">
             <div style="font-weight: bold; margin-bottom: 5px;">The angles shown are measured relative to the wind:</div>
             <ul style="margin-top: 0; padding-left: 20px;">
                 <li><strong>0°</strong> = sailing directly into the wind (impossible)</li>
@@ -184,7 +184,7 @@ def display_page():
                 <li><strong>180°</strong> = sailing directly downwind</li>
             </ul>
             <div style="margin-top: 8px;">
-                <span style="color: #0068C9;"><strong>Tip:</strong></span> 
+                <span style="color: var(--primary-color, #0068C9);"><strong>Tip:</strong></span> 
                 Smaller angles = better upwind performance<br>
                 Larger angles = better downwind speed
             </div>
@@ -210,7 +210,7 @@ def display_page():
         
         # Add direction reference
         st.markdown("""
-        <div style="margin-bottom: 12px; padding: 8px; background-color: #f0f2f6; border-radius: 4px; text-align: center;">
+        <div style="margin-bottom: 12px; padding: 8px; background-color: var(--secondary-background-color, #f0f2f6); color: var(--text-color, #262730); border-radius: 4px; text-align: center;">
             <strong>Wind Direction Reference</strong><br>
             <span style="font-size: 13px;">Wind direction is where the wind is coming FROM</span>
             <div style="display: grid; grid-template-columns: 1fr 1fr; margin-top: 5px; gap: 4px; text-align: center;">
@@ -732,9 +732,9 @@ def display_page():
     else:
         # Display a more helpful instruction message
         st.markdown("""
-        <div style="text-align: center; padding: 20px; background-color: #f8f9fa; border-radius: 10px; margin-top: 30px;">
+        <div style="text-align: center; padding: 20px; background-color: var(--secondary-background-color, #f8f9fa); color: var(--text-color, #262730); border-radius: 10px; margin-top: 30px;">
             <h3>📤 Upload a GPX Track File</h3>
             <p>Select a GPX file from your Strava downloads or other GPS device to analyze your wingfoil session.</p>
-            <p style="font-size: 0.9rem; color: #666;">The analysis will show you wind angles, speed patterns, and performance metrics for your session.</p>
+            <p style="font-size: 0.9rem; color: var(--text-color, #666);">The analysis will show you wind angles, speed patterns, and performance metrics for your session.</p>
         </div>
         """, unsafe_allow_html=True)

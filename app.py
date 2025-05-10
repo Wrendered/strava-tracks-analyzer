@@ -220,7 +220,7 @@ def main():
         
         # Upcoming Features
         st.markdown("""
-        <div style="margin-top: 30px; padding: 15px; background-color: var(--background-color, #f8f9fa); color: var(--text-color, #262730); border-radius: 8px; border: 1px solid rgba(0, 104, 201, 0.2);">
+        <div style="margin-top: 30px; padding: 15px; background-color: var(--secondary-background-color, #f8f9fa); color: var(--text-color, #262730); border-radius: 8px; border: 1px solid var(--primary-color, rgba(0, 104, 201, 0.2));">
             <h3>Upcoming Features</h3>
             <p>These features are in development and coming soon:</p>
             <ul>

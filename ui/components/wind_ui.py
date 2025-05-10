@@ -68,7 +68,7 @@ def wind_direction_selector(
         # Display estimated wind if available, but without confidence indicators
         if estimated_wind is not None:
             st.markdown(f"""
-            <div style="padding: 5px 10px; background-color: rgba(0,0,0,0.05); border-radius: 5px; margin-bottom: 10px; color: var(--text-color, #262730);">
+            <div style="padding: 5px 10px; background-color: var(--secondary-background-color, rgba(0,0,0,0.05)); border-radius: 5px; margin-bottom: 10px; color: var(--text-color, #262730);">
                 <strong>Session Average Wind Direction:</strong> {estimated_wind:.1f}°<br>
                 <span style="font-size: 0.85rem; color: var(--text-color, #555);">Calculated from all your tacks and sailing angles</span>
             </div>

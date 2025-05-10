@@ -136,7 +136,7 @@ def display_track_map(
                 icon=folium.DivIcon(
                     icon_size=(150, 36),
                     icon_anchor=(75, 18),
-                    html=f'<div style="font-size: 12pt; color: black; background-color: rgba(255,255,255,0.7); '
+                    html=f'<div style="font-size: 12pt; color: var(--text-color, black); background-color: var(--secondary-background-color, rgba(255,255,255,0.7)); '
                          f'padding: 3px; border-radius: 3px;">{wind_info}</div>'
                 )
             ).add_to(m)

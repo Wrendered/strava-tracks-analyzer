@@ -42,7 +42,7 @@ def display_page():
         
         # Add some more detailed instructions
         st.markdown("""
-        <div style="padding: 20px; background-color: #f8f9fa; border-radius: 8px; margin-top: 20px;">
+        <div style="padding: 20px; background-color: var(--secondary-background-color, #f8f9fa); color: var(--text-color, #262730); border-radius: 8px; margin-top: 20px;">
             <h3>How to Add Gear to Compare:</h3>
             <ol>
                 <li>Go to the <strong>Track Analysis</strong> tab</li>
@@ -51,7 +51,7 @@ def display_page():
                 <li>Give your setup a descriptive title</li>
                 <li>Return to this page to see your saved gear</li>
             </ol>
-            <p style="margin-top: 15px; font-style: italic; color: #666;">
+            <p style="margin-top: 15px; font-style: italic; color: var(--text-color, #666);">
                 The comparison feature allows you to compare different wing, foil, and board combinations
                 to see which performs best in different conditions.
             </p>
