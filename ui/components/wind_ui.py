@@ -40,7 +40,7 @@ def wind_direction_selector(
         # More visual direction reference
         st.markdown("""
         <div style="display: flex; justify-content: center; margin-bottom: 10px;">
-            <div style="text-align: center; padding: 8px; background-color: #f0f2f6; border-radius: 4px; width: 100%;">
+            <div style="text-align: center; padding: 8px; background-color: var(--secondary-background-color, #f0f2f6); color: var(--text-color, #262730); border-radius: 4px; width: 100%;">
                 <strong>Wind Direction Reference</strong><br>
                 <span style="font-size: 13px;">Wind direction is where the wind is coming FROM</span>
                 <div style="display: flex; justify-content: space-around; margin-top: 5px;">
@@ -68,9 +68,9 @@ def wind_direction_selector(
         # Display estimated wind if available, but without confidence indicators
         if estimated_wind is not None:
             st.markdown(f"""
-            <div style="padding: 5px 10px; background-color: rgba(0,0,0,0.05); border-radius: 5px; margin-bottom: 10px;">
+            <div style="padding: 5px 10px; background-color: rgba(0,0,0,0.05); border-radius: 5px; margin-bottom: 10px; color: var(--text-color, #262730);">
                 <strong>Session Average Wind Direction:</strong> {estimated_wind:.1f}°<br>
-                <span style="font-size: 0.85rem; color: #555;">Calculated from all your tacks and sailing angles</span>
+                <span style="font-size: 0.85rem; color: var(--text-color, #555);">Calculated from all your tacks and sailing angles</span>
             </div>
             """, unsafe_allow_html=True)
         

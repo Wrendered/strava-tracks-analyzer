@@ -78,6 +78,9 @@ def main():
         .card-metric {
             color: var(--primary-color, #4DA8FF) !important;
         }
+        .metric-label {
+            color: var(--text-color, rgba(250, 250, 250, 0.8)) !important;
+        }
     }
     </style>
     """, unsafe_allow_html=True)
@@ -87,7 +90,7 @@ def main():
     
     # Shorter introduction banner 
     st.markdown("""
-    <div style="padding: 10px; background-color: rgba(0, 104, 201, 0.07); border-radius: 8px; margin-bottom: 15px;">
+    <div style="padding: 10px; background-color: rgba(0, 104, 201, 0.07); border-radius: 8px; margin-bottom: 15px; color: var(--text-color, #262730);">
         <p style="margin: 0; font-size: 0.95rem;">
             A prototype built in my spare time to analyze upwind performance from your GPX tracks. 
             Expect quirks, breakage, and the occasional bug — and please send feedback to my Instagram: 
@@ -129,7 +132,7 @@ def main():
         
         # About section with longer explanation
         st.markdown("""
-        <div style="padding: 15px; background-color: rgba(0, 104, 201, 0.07); border-radius: 8px; margin-bottom: 25px;">
+        <div style="padding: 15px; background-color: rgba(0, 104, 201, 0.07); border-radius: 8px; margin-bottom: 25px; color: var(--text-color, #262730);">
             <p style="font-size: 1.1rem; line-height: 1.5;">
                 Foil Lab is a side project I made to help understand how different gear, wind conditions, and technique affect upwind performance. 
                 You can upload GPX tracks (like from Strava), and the tool will give you a breakdown of wind angles, tack symmetry, and more.
@@ -217,7 +220,7 @@ def main():
         
         # Upcoming Features
         st.markdown("""
-        <div style="margin-top: 30px; padding: 15px; background-color: #f8f9fa; border-radius: 8px;">
+        <div style="margin-top: 30px; padding: 15px; background-color: var(--background-color, #f8f9fa); color: var(--text-color, #262730); border-radius: 8px; border: 1px solid rgba(0, 104, 201, 0.2);">
             <h3>Upcoming Features</h3>
             <p>These features are in development and coming soon:</p>
             <ul>
