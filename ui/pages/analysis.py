@@ -80,9 +80,12 @@ def update_wind_direction(new_wind_direction, recalculate_stretches=True):
             )
             
             # Filter by minimum speed
-            min_speed_ms = min_speed * 0.514444  # Convert knots to m/s
             if not base_stretches.empty:
-                base_stretches = base_stretches[base_stretches['speed'] >= min_speed_ms]
+                logger.info(f"Filtering {len(base_stretches)} stretches by min_speed: {min_speed} knots")
+                
+                # Filter by speed in knots directly - stretches['speed'] is already in knots
+                base_stretches = base_stretches[base_stretches['speed'] >= min_speed]
+                logger.info(f"After filtering: {len(base_stretches)} stretches remain")
                 
                 # Analyze with new wind direction
                 recalculated = analyze_wind_angles(base_stretches, new_wind_direction)
@@ -354,8 +357,11 @@ def display_page():
                 
                 # Filter stretches by speed
                 if not stretches.empty:
-                    min_speed_ms = min_speed * 0.514444  # Convert knots to m/s
-                    stretches = stretches[stretches['speed'] >= min_speed_ms]
+                    logger.info(f"Filtering {len(stretches)} stretches by min_speed: {min_speed} knots")
+                    
+                    # Filter by speed in knots directly - stretches['speed'] is already in knots
+                    stretches = stretches[stretches['speed'] >= min_speed]
+                    logger.info(f"After filtering: {len(stretches)} stretches remain")
                     
                 # Store in session state if not empty
                 if not stretches.empty:
