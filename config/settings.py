@@ -21,11 +21,11 @@ LOGS_DIR = os.path.join(BASE_DIR, "logs")
 # Default values
 DEFAULT_WIND_DIRECTION = 90  # Degrees
 
-# Analysis parameters
-DEFAULT_ANGLE_TOLERANCE = 20  # Degrees
-DEFAULT_MIN_DURATION = 20  # Seconds
-DEFAULT_MIN_DISTANCE = 100  # Meters
-DEFAULT_MIN_SPEED = 10.0  # Knots
+# Analysis parameters - adjusted for better track detection with short tacks
+DEFAULT_ANGLE_TOLERANCE = 25  # Degrees - increased from 20° to detect more tacks with variations
+DEFAULT_MIN_DURATION = 15  # Seconds - reduced from 20s to capture shorter tacks
+DEFAULT_MIN_DISTANCE = 75  # Meters - reduced from 100m for better track coverage
+DEFAULT_MIN_SPEED = 8.0  # Knots - lowered from 10.0 to include more valid segments
 DEFAULT_SUSPICIOUS_ANGLE_THRESHOLD = 20  # Degrees
 
 # Logging configuration
