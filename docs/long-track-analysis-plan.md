@@ -25,16 +25,18 @@ This plan outlines the implementation of enhanced analysis capabilities for very
   - Scale formula: `new_min = base_min * log(current_segments/ideal_segments)`
   - Scale angle tolerance if necessary based on heading variance
   
-#### 0.2. Real-time Feedback Loop
-- Create visualization of over-segmentation detection
-- Implement auto-suggestion of parameter adjustments
-- Add real-time segment count metrics with quality indication
-- Add manual override option for suggested parameters
+#### 0.2. Automatic Parameter Optimization
+- Automatically detect over-segmentation on track load 
+- Implement auto-scaling of parameters when over-segmentation is detected
+- Store original parameters to allow reverting to initial values
+- Add subtle notification when parameters are auto-adjusted
+- Include metrics showing optimization results (e.g., "Reduced segments from 80 to 15")
 
 #### 0.3. Integration with Current UI
-- Add adaptive warning when over-segmentation is detected
-- Implement "Optimize Segments" button for one-click parameter adjustment
-- Add segment quality metrics to existing visualizations
+- Update sliders with new parameter values when auto-adjusted
+- Add "Revert to Original" button to restore pre-optimization parameters
+- Display optimization metrics (before/after segment counts, quality score)
+- Highlight optimized parameters visually in the UI
 
 ### Phase 1: Core Infrastructure
 
@@ -127,7 +129,7 @@ This plan outlines the implementation of enhanced analysis capabilities for very
 - `core/segments.py` - Add adaptive parameter adjustment
 - `core/wind/estimate.py` - Integrate wind shift detection
 - `core/metrics.py` - Add segment-aware metrics
-- `ui/pages/analysis.py` - Add mode toggle and segmentation controls
+- `ui/pages/analysis.py` - Add automatic parameter optimization
 - `ui/components/visualization.py` - Enhanced visualizations
 - `config/settings.py` - Add configuration for long tracks
 
@@ -160,6 +162,7 @@ class Track:
     segmentation_method: str
     mode: str  # 'short' or 'long'
     optimal_segmentation_params: SegmentationParams
+    original_segmentation_params: SegmentationParams  # Store original params for reverting
 ```
 
 ### Adaptive Parameter Scaling Implementation
@@ -221,6 +224,79 @@ def analyze_segmentation_quality(stretches: pd.DataFrame, tack_data: pd.DataFram
         'ideal_segments': ideal_segments,
         'suggested_params': suggested_params
     }
+
+def apply_optimized_parameters(st, quality_analysis):
+    """
+    Apply optimized parameters automatically in the UI and show notification
+    
+    Args:
+        st: Streamlit session
+        quality_analysis: Dict with quality metrics and suggested parameters
+    """
+    # Store original parameters for potential revert
+    if 'original_parameters' not in st.session_state:
+        st.session_state.original_parameters = {
+            'min_distance': st.session_state.min_distance,
+            'min_time': st.session_state.min_time,
+            'max_angle_tolerance': st.session_state.max_angle_tolerance
+        }
+    
+    # Apply new parameters
+    st.session_state.min_distance = quality_analysis['suggested_params'].min_distance
+    st.session_state.min_time = quality_analysis['suggested_params'].min_time
+    st.session_state.max_angle_tolerance = quality_analysis['suggested_params'].max_angle_tolerance
+    
+    # Trigger recalculation with new parameters
+    st.session_state.should_recalculate_segments = True
+    
+    # Show optimization notification
+    st.success(f"Parameters automatically optimized to reduce segments from {quality_analysis['total_segments']} to approximately {quality_analysis['ideal_segments']}.")
+```
+
+### Automatic Optimization in UI
+```python
+def setup_parameter_controls(st):
+    """Set up parameter controls with automatic optimization"""
+    col1, col2, col3, col4 = st.columns([3, 3, 3, 2])
+    
+    with col1:
+        min_distance = st.slider("Minimum Distance (m)", 5.0, 100.0, 
+                                st.session_state.min_distance, 5.0,
+                                key="min_distance_slider",
+                                help="Minimum distance for a stretch to be considered")
+    
+    with col2:
+        min_time = st.slider("Minimum Time (s)", 5.0, 60.0, 
+                            st.session_state.min_time, 5.0,
+                            key="min_time_slider",
+                            help="Minimum time for a stretch to be considered")
+    
+    with col3:
+        max_angle_tolerance = st.slider("Max Angle Tolerance (°)", 5.0, 30.0, 
+                                        st.session_state.max_angle_tolerance, 1.0,
+                                        key="max_angle_tolerance_slider",
+                                        help="Maximum angle deviation allowed within a stretch")
+    
+    with col4:
+        if 'original_parameters' in st.session_state:
+            if st.button("Revert Parameters", help="Revert to original parameters before optimization"):
+                # Restore original parameters
+                st.session_state.min_distance = st.session_state.original_parameters['min_distance']
+                st.session_state.min_time = st.session_state.original_parameters['min_time']
+                st.session_state.max_angle_tolerance = st.session_state.original_parameters['max_angle_tolerance']
+                
+                # Clear original parameters storage
+                del st.session_state.original_parameters
+                
+                # Trigger recalculation
+                st.session_state.should_recalculate_segments = True
+                st.experimental_rerun()
+    
+    # If we detect over-segmentation after calculation, show metrics
+    if hasattr(st.session_state, 'segmentation_quality') and st.session_state.segmentation_quality['over_segmentation_score'] > 0.7:
+        quality = st.session_state.segmentation_quality
+        st.info(f"Segments: {quality['total_segments']} (Ideal: ~{int(quality['ideal_segments'])}), "
+                f"Max segments on single tack: {quality['max_segments_per_tack']}")
 ```
 
 ### Service Layer Updates
@@ -235,8 +311,8 @@ class SegmentService:
         """Suggest optimal segmentation parameters based on track characteristics"""
         pass
     
-    def optimize_segments(self, track: pd.DataFrame) -> Tuple[pd.DataFrame, Dict]:
-        """Automatically optimize segmentation parameters and return new segments"""
+    def apply_optimal_parameters(self, track: pd.DataFrame) -> Tuple[pd.DataFrame, Dict]:
+        """Automatically apply optimal segmentation parameters and return new segments"""
         pass
     
     # Methods for later phases
@@ -286,7 +362,7 @@ class WindService:
 ### Week 1: Adaptive Parameter Scaling (Phase 0)
 - Implement segment consolidation detection
 - Build parameter scaling algorithms
-- Create UI feedback for over-segmentation
+- Create automatic parameter adjustment
 - Integrate with existing UI
 
 ### Week 2: Core Infrastructure (Phase 1)
