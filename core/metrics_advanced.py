@@ -7,6 +7,7 @@ wind direction estimation and VMG calculations.
 """
 
 from core.wind.models import WindEstimate
+from utils.segment_analysis import detect_suspicious_segments
 
 import pandas as pd
 import numpy as np
@@ -95,12 +96,26 @@ def calculate_vmg_upwind(
         return None
     
     try:
-        # Step 1: Filter by minimum distance
-        filtered_upwind = upwind_segments[upwind_segments['distance'] >= min_segment_distance]
+        # Step 1: Filter out suspicious segments first
+        suspicious_segments = detect_suspicious_segments(
+            upwind_segments,
+            min_angle_to_wind=20.0,  # Minimum reasonable angle to wind
+            min_segment_length=min_segment_distance  # Use the provided minimum distance
+        )
         
-        # If no segments meet the minimum distance requirement, fall back to all segments
+        # Keep only non-suspicious segments
+        filtered_upwind = suspicious_segments[~suspicious_segments['suspicious']]
+        
+        # Log suspicious segments
+        suspicious_count = len(suspicious_segments) - len(filtered_upwind)
+        if suspicious_count > 0:
+            logger.info(f"Excluded {suspicious_count} suspicious segments from VMG calculation")
+            if not suspicious_segments[suspicious_segments['suspicious']].empty:
+                logger.debug(f"Suspicious reasons: {suspicious_segments[suspicious_segments['suspicious']]['suspicious_reason'].value_counts().to_dict()}")
+        
+        # If no segments remain after filtering, fall back to all segments
         if filtered_upwind.empty:
-            logger.warning(f"No upwind segments meet the {min_segment_distance}m minimum distance. Using all upwind segments.")
+            logger.warning(f"No upwind segments remain after filtering. Using all upwind segments.")
             filtered_upwind = upwind_segments
         
         if not filtered_upwind.empty:
@@ -278,10 +293,22 @@ def estimate_wind_direction_weighted(
         # Step 1: Filter upwind segments (angle_to_wind < 90°)
         upwind = stretches[stretches['angle_to_wind'] < 90].copy()
         
-        # Step 2: Filter out suspiciously small angles to wind
-        if suspicious_angle_threshold > 0:
-            upwind = upwind[upwind['angle_to_wind'] >= suspicious_angle_threshold]
-            logger.info(f"Filtered to {len(upwind)} upwind segments with angles >= {suspicious_angle_threshold}°")
+        # Step 2: Filter out suspicious segments using our enhanced analysis
+        suspicious_segments = detect_suspicious_segments(
+            upwind,
+            min_angle_to_wind=suspicious_angle_threshold,
+            min_segment_length=30.0  # 30 meters minimum for reliable segments
+        )
+        
+        # Keep only non-suspicious segments
+        upwind_filtered = suspicious_segments[~suspicious_segments['suspicious']]
+        
+        # Log the filtering results
+        logger.info(f"Filtered out {len(suspicious_segments) - len(upwind_filtered)} suspicious segments out of {len(upwind)}")
+        logger.info(f"Suspicious reasons: {suspicious_segments[suspicious_segments['suspicious']]['suspicious_reason'].value_counts().to_dict()}")
+        
+        # Update upwind segments to use filtered version
+        upwind = upwind_filtered
         
         # Step 3: Apply minimum distance filter
         if min_segment_distance > 0:

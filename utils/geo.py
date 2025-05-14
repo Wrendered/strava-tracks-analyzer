@@ -81,13 +81,18 @@ def angle_to_wind(bearing: float, wind_direction: float) -> float:
     # Take the smaller angle (0-180)
     angle = min(diff, 360 - diff)
     
-    # Log suspicious values but don't modify them - let the user decide
+    # Add more detailed debugging for small angles 
+    import logging
+    logger = logging.getLogger(__name__)
+    
     if angle < 15:
-        import logging
-        logger = logging.getLogger(__name__)
         logger.warning(f"Suspiciously small angle to wind detected: {angle}° " + 
                       f"(bearing: {bearing}°, wind: {wind_direction}°)")
-    
+    elif angle < 30:
+        # Log more details for angles that are suspiciously small but not critical
+        logger.debug(f"Small angle to wind detected: {angle}° " + 
+                   f"(bearing: {bearing}°, wind: {wind_direction}°)")
+        
     return angle
 
 def meters_per_second_to_knots(speed_ms: float) -> float:

@@ -31,6 +31,9 @@ def find_consistent_angle_stretches(
     Returns:
         DataFrame: Detected stretches with their properties
     """
+    # Debug: Add more detailed logging for segment detection
+    logger.info(f"Finding consistent angle stretches with tolerance={angle_tolerance}°, "
+               f"min_duration={min_duration_seconds}s, min_distance={min_distance_meters}m")
     if len(df) < 2:
         return pd.DataFrame()
     
