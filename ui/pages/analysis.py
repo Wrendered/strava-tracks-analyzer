@@ -595,10 +595,36 @@ def display_page():
                                             f"{best_starboard['speed']:.1f} knots")
                                     st.caption(f"Bearing: {best_starboard['bearing']:.0f}°")
                                 
-                                # Calculate upwind progress speed when we have both tacks
-                                if 'best_port' in locals() and 'best_starboard' in locals():
-                                    import math
+                                # Calculate VMG upwind using improved weighted algorithm
+                                import math
+                                
+                                # Collect upwind segments close to best upwind angle for more focused calculation
+                                upwind_vmg = None
+                                
+                                if not upwind.empty:
+                                    # First, find the best upwind angle (smallest angle to wind)
+                                    best_upwind_angle = upwind['angle_to_wind'].min()
                                     
+                                    # Filter to only include segments within 20 degrees of best upwind
+                                    max_angle_threshold = min(best_upwind_angle + 20, 90)
+                                    filtered_upwind = upwind[upwind['angle_to_wind'] <= max_angle_threshold]
+                                    
+                                    if not filtered_upwind.empty:
+                                        # Calculate VMG for each segment and weight by distance
+                                        filtered_upwind['vmg'] = filtered_upwind.apply(
+                                            lambda row: row['speed'] * math.cos(math.radians(row['angle_to_wind'])), axis=1
+                                        )
+                                        
+                                        # Weight by distance - longer segments contribute more to average
+                                        if filtered_upwind['distance'].sum() > 0:
+                                            upwind_vmg = np.average(
+                                                filtered_upwind['vmg'], 
+                                                weights=filtered_upwind['distance']
+                                            )
+                                
+                                # Fallback to original single-best-angle approach if we have both tacks
+                                # but don't have sufficient weighted data
+                                if (upwind_vmg is None or upwind_vmg == 0) and 'best_port' in locals() and 'best_starboard' in locals():
                                     # Simply average the angles - no balancing or weighting
                                     pointing_power = (best_port['angle_to_wind'] + best_starboard['angle_to_wind']) / 2
                                     
@@ -606,20 +632,28 @@ def display_page():
                                     avg_upwind_speed = (best_port['speed'] + best_starboard['speed']) / 2
                                     
                                     # Calculate upwind progress speed
-                                    upwind_progress_speed = avg_upwind_speed * math.cos(math.radians(pointing_power))
-                                    
-                                    # Display upwind progress speed 
-                                    st.metric("Upwind Progress", 
-                                            f"{upwind_progress_speed:.1f} knots", 
-                                            help="Effective speed directly upwind (speed × cos(angle))")
+                                    upwind_vmg = avg_upwind_speed * math.cos(math.radians(pointing_power))
+                                
+                                # Display VMG upwind if we have a valid calculation
+                                if upwind_vmg is not None:
+                                    # Display VMG upwind
+                                    st.metric("VMG upwind-ish", 
+                                            f"{upwind_vmg:.1f} knots", 
+                                            help="Distance-weighted average of (speed × cos(angle)) for upwind segments within 20° of your best upwind angle. Measures your effective 'comfortable' upwind progress.")
                                     
                                     # Display session average wind direction - simple average
-                                    # Note the angle difference but don't balance
-                                    angle_diff = abs(best_port['angle_to_wind'] - best_starboard['angle_to_wind'])
-                                    st.markdown("---")
-                                    st.info(f"**Session Average Wind Direction**  \n"
-                                          f"Combined angle: {pointing_power:.1f}°  \n"
-                                          f"(Port/Starboard difference: {angle_diff:.1f}°)")
+                                    if 'best_port' in locals() and 'best_starboard' in locals():
+                                        # Note the angle difference but don't balance
+                                        angle_diff = abs(best_port['angle_to_wind'] - best_starboard['angle_to_wind'])
+                                        
+                                        # Compute average angle if not already done
+                                        if 'pointing_power' not in locals():
+                                            pointing_power = (best_port['angle_to_wind'] + best_starboard['angle_to_wind']) / 2
+                                            
+                                        st.markdown("---")
+                                        st.info(f"**Session Average Wind Direction**  \n"
+                                              f"Combined angle: {pointing_power:.1f}°  \n"
+                                              f"(Port/Starboard difference: {angle_diff:.1f}°)")
                             else:
                                 st.info("No upwind data")
                         

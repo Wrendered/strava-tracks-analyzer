@@ -27,7 +27,8 @@ class GearItem:
     active_duration: Optional[float] = None  # Active duration in minutes
     
     # Performance metrics
-    upwind_progress_speed: Optional[float] = None  # Effective upwind speed in knots
+    upwind_progress_speed: Optional[float] = None  # Legacy field - kept for backward compatibility
+    vmg_upwind: Optional[float] = None  # Velocity Made Good upwind in knots
     best_port_upwind_angle: Optional[float] = None  # Best port upwind angle in degrees
     best_port_upwind_speed: Optional[float] = None  # Best port upwind speed in knots
     best_starboard_upwind_angle: Optional[float] = None  # Best starboard upwind angle in degrees
@@ -60,7 +61,8 @@ class GearItem:
         metrics = session_state.get('track_metrics', {})
         
         # Extract performance metrics from track stretches if available
-        upwind_progress = None
+        upwind_progress = None  # Legacy field
+        vmg_upwind = None  # New field
         best_port_upwind = {"angle": None, "speed": None}
         best_starboard_upwind = {"angle": None, "speed": None}
         best_port_downwind = {"angle": None, "speed": None}
@@ -97,18 +99,47 @@ class GearItem:
                             "speed": best_starboard['speed']  # Speed is already in knots in the UI
                         }
                     
+                    # Calculate improved VMG upwind using all upwind segments
+                    import math
+                    import numpy as np
+                    
+                    # Calculate VMG for segments close to best upwind angle and weight by distance
+                    if not upwind.empty:
+                        # First, find the best upwind angle (smallest angle to wind)
+                        best_upwind_angle = upwind['angle_to_wind'].min()
+                        
+                        # Filter to only include segments within 20 degrees of best upwind
+                        max_angle_threshold = min(best_upwind_angle + 20, 90)
+                        filtered_upwind = upwind[upwind['angle_to_wind'] <= max_angle_threshold]
+                        
+                        if not filtered_upwind.empty:
+                            # Calculate VMG for each segment
+                            filtered_upwind['vmg'] = filtered_upwind.apply(
+                                lambda row: row['speed'] * math.cos(math.radians(row['angle_to_wind'])), axis=1
+                            )
+                            
+                            # Weight by distance - longer segments contribute more to average
+                            if filtered_upwind['distance'].sum() > 0:
+                                vmg_upwind = np.average(
+                                    filtered_upwind['vmg'], 
+                                    weights=filtered_upwind['distance']
+                                )
+                    
+                    # Fallback to original method for backward compatibility
                     # Calculate upwind progress speed when we have both tacks
                     if all(best_port_upwind.values()) and all(best_starboard_upwind.values()):
-                        import math
-                        
                         # Simply average the angles
                         pointing_power = (best_port_upwind["angle"] + best_starboard_upwind["angle"]) / 2
                         
                         # Average speed
                         avg_upwind_speed = (best_port_upwind["speed"] + best_starboard_upwind["speed"]) / 2
                         
-                        # Calculate upwind progress speed
+                        # Calculate upwind progress speed (legacy field)
                         upwind_progress = avg_upwind_speed * math.cos(math.radians(pointing_power))
+                        
+                        # Use this as fallback for VMG if we couldn't calculate it above
+                        if vmg_upwind is None:
+                            vmg_upwind = upwind_progress
                 
                 # Get downwind metrics
                 if not downwind.empty:
@@ -152,7 +183,8 @@ class GearItem:
             distance=metrics.get('distance'),
             duration=metrics.get('duration').total_seconds() / 60 if metrics.get('duration') else None,
             active_duration=metrics.get('active_duration').total_seconds() / 60 if metrics.get('active_duration') else None,
-            upwind_progress_speed=upwind_progress,
+            upwind_progress_speed=upwind_progress,  # Legacy field
+            vmg_upwind=vmg_upwind,
             best_port_upwind_angle=best_port_upwind["angle"],
             best_port_upwind_speed=best_port_upwind["speed"],
             best_starboard_upwind_angle=best_starboard_upwind["angle"],
