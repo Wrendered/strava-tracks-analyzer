@@ -11,109 +11,174 @@ strava-tracks-analyzer/
 ├── app.py                   # Main Streamlit entry point
 ├── config/                  # Configuration files
 │   ├── __init__.py
-│   └── settings.py          # App settings and constants
+│   └── settings.py          # Centralized configuration and constants
 ├── core/                    # Core business logic
 │   ├── __init__.py
 │   ├── gpx.py               # GPX file parsing and handling
 │   ├── metrics.py           # Track metrics calculations
-│   ├── segments.py          # Segment detection and analysis
+│   ├── metrics_advanced.py  # Advanced metrics algorithms
+│   ├── models/              # Data models
+│   │   ├── __init__.py
+│   │   ├── gear_item.py     # Gear model
+│   │   ├── segment.py       # Segment model
+│   │   └── track.py         # Track model
+│   ├── segments/            # Segment analysis
+│   │   ├── __init__.py
+│   │   └── analyzer.py      # Segment analyzer
+│   ├── segments.py          # Segment detection
 │   └── wind/                # Wind direction analysis
 │       ├── __init__.py
-│       ├── direction.py     # Wind direction estimation algorithms
-│       └── models.py        # Wind data models and calculations
-├── ui/                      # UI components and pages
+│       ├── direction.py     # Wind direction utilities
+│       ├── estimate.py      # Wind estimation
+│       ├── estimator.py     # Unified wind estimator
+│       └── models.py        # Wind data models
+├── data/                    # Example data files
+├── docs/                    # Documentation
+├── services/                # Business services
 │   ├── __init__.py
-│   ├── pages/               # Main UI pages
+│   ├── segment_service.py   # Segment business logic
+│   └── wind_service.py      # Wind business logic
+├── tests/                   # Test cases
+│   ├── __init__.py
+│   ├── test_gpx.py
+│   ├── test_metrics.py
+│   ├── test_segments.py
+│   └── test_wind.py
+├── ui/                      # User interface
+│   ├── __init__.py
+│   ├── callbacks.py         # UI event handlers
+│   ├── components/          # Reusable UI components
 │   │   ├── __init__.py
-│   │   ├── analysis.py      # Track analysis page
-│   │   ├── comparison.py    # Gear comparison page
-│   │   └── guide.py         # Guide page
-│   └── components/          # Reusable UI components
+│   │   ├── filters.py       # Filter UI components
+│   │   ├── gear_export.py   # Gear export functionality
+│   │   ├── visualization.py # Data visualization components
+│   │   └── wind_ui.py       # Wind direction UI components
+│   └── pages/               # Application pages
 │       ├── __init__.py
-│       ├── filters.py       # Filter UI components
-│       └── visualization.py # Data visualization components
-├── utils/                   # Utility functions
-│   ├── __init__.py
-│   ├── geo.py              # Geographic calculations
-│   └── validation.py       # Input validation helpers
-└── tests/                  # Test directory
+│       ├── analysis.py      # Track analysis page
+│       └── gear_comparison.py # Gear comparison page
+└── utils/                   # Utility functions
     ├── __init__.py
-    ├── test_gpx.py
-    ├── test_metrics.py
-    ├── test_segments.py
-    └── test_wind.py
+    ├── analysis.py          # Analysis utilities
+    ├── calculations.py      # General calculation utilities
+    ├── errors.py            # Error handling framework
+    ├── geo.py               # Geographic calculations
+    ├── gpx_parser.py        # GPX parsing utilities
+    ├── segment_analysis.py  # Segment analysis utilities
+    ├── state_manager.py     # Streamlit session state management
+    ├── validation.py        # Input validation helpers
+    └── visualization.py     # Visualization utilities
 ```
 
 ## Architecture Overview
 
-The WingWizard application follows a clean architecture with clear separation of concerns:
+The Foil Lab application follows a clean, layered architecture with clear separation of concerns:
 
-1. **Core Business Logic**: The `core` directory contains all the business logic of the application, including GPX file parsing, metrics calculations, segment detection, and wind direction analysis. This logic is independent of the UI and can be reused in other contexts.
+1. **Data Layer**: Data models and structures that represent application entities (track, segment, wind, etc.)
 
-2. **UI Components**: The `ui` directory contains all the Streamlit UI components and pages. The UI is built on top of the core business logic and is responsible for presenting data to the user and handling user interactions.
+2. **Core Business Logic**: The `core` directory contains domain-specific algorithms and logic, independent of the UI or services.
 
-3. **Configuration**: The `config` directory contains application settings and constants, centralized for easy management.
+3. **Service Layer**: The `services` directory contains business operations that coordinate between different core components and implement use cases.
 
-4. **Utilities**: The `utils` directory contains utility functions that are used throughout the application, such as geographic calculations and validation helpers.
+4. **UI Layer**: The `ui` directory contains all Streamlit UI components, pages, and callbacks.
 
-5. **Tests**: The `tests` directory contains unit tests for the core business logic.
+5. **Utility Layer**: The `utils` directory contains cross-cutting concerns and helpers.
+
+6. **Configuration**: The `config` directory centralizes application settings and constants.
+
+7. **Tests**: The `tests` directory contains unit and integration tests.
 
 ## Key Components
 
 ### Core Module
 
 - **GPX Processing**: The `core/gpx.py` module handles GPX file parsing and processing.
-- **Metrics Calculation**: The `core/metrics.py` module calculates track metrics such as distance, speed, and duration.
+- **Metrics Calculation**: The `core/metrics.py` and `core/metrics_advanced.py` modules calculate track metrics.
 - **Segment Detection**: The `core/segments.py` module detects consistent segments in track data.
-- **Wind Direction Estimation**: The `core/wind/direction.py` module contains algorithms for estimating wind direction based on sailing patterns.
-- **Wind Models**: The `core/wind/models.py` module contains data models and structures for working with wind data.
+- **Segment Analysis**: The `core/segments/analyzer.py` module analyzes and filters segments.
+- **Wind Estimation**: The `core/wind/estimator.py` module provides a unified wind estimation API.
+- **Data Models**: The `core/models` directory contains strongly-typed data structures.
+
+### Service Layer
+
+- **Segment Service**: The `services/segment_service.py` module coordinates segment operations.
+- **Wind Service**: The `services/wind_service.py` module coordinates wind-related operations.
 
 ### UI Module
 
-- **Pages**: The `ui/pages` directory contains the main Streamlit pages of the application.
-- **Components**: The `ui/components` directory contains reusable UI components such as filters and visualizations.
+- **Pages**: The `ui/pages` directory contains the main Streamlit pages.
+- **Components**: The `ui/components` directory contains reusable UI components.
+- **Callbacks**: The `ui/callbacks.py` module centralizes UI event handling.
 
 ### Utils Module
 
-- **Geo Calculations**: The `utils/geo.py` module contains functions for calculating geographic information such as bearings and distances.
-- **Validation**: The `utils/validation.py` module contains functions for validating user input and parameters.
+- **State Management**: The `utils/state_manager.py` module centralizes Streamlit session state.
+- **Error Handling**: The `utils/errors.py` module provides standardized error handling.
+- **Geo Calculations**: The `utils/geo.py` module contains geographic calculations.
+- **Segment Analysis**: The `utils/segment_analysis.py` module provides utilities for segment quality analysis.
 
 ## Data Flow
 
 1. The user uploads a GPX file through the Streamlit UI.
 2. The GPX file is parsed into a pandas DataFrame by the GPX processing module.
-3. The metrics calculation module calculates basic track metrics.
-4. The segment detection module finds consistent segments in the track data.
-5. The wind direction estimation module estimates the wind direction based on the segments.
-6. The UI displays the results to the user, including visualizations such as the track map and polar diagram.
+3. The segment service detects consistent segments in the track data.
+4. The wind service estimates the wind direction from the segments.
+5. The segment analyzer scores and filters segments for reliability.
+6. The metrics modules calculate performance metrics like VMG.
+7. The UI components render visualizations and analysis.
 
-## Migration Guide
+## State Management
 
-To migrate from the old structure to the new structure:
+Streamlit's session state is centrally managed through the `utils/state_manager.py` module, which provides:
 
-1. **Set up the new directory structure** as outlined above.
-2. **Move the existing code** to the appropriate modules:
-   - Move GPX parsing code to `core/gpx.py`
-   - Move metrics calculation code to `core/metrics.py`
-   - Move segment detection code to `core/segments.py`
-   - Move wind direction estimation code to `core/wind/direction.py`
-   - Move UI code to the appropriate files in `ui/`
+- Type-safe access to state values
+- Default values for missing state
+- Change tracking
+- Domain-specific state managers for wind, segments, etc.
 
-3. **Update imports** in all files to reflect the new structure.
-4. **Update the main app entry point** (`app.py`) to use the new structure.
-5. **Run tests** to ensure the application still works as expected.
+This prevents session state access from being scattered throughout the codebase.
+
+## UI Component Design
+
+UI components are designed with:
+
+1. **Clear Separation**: UI components focus on presentation, not business logic.
+2. **Centralized Callbacks**: Event handlers are defined in `ui/callbacks.py`.
+3. **Stateless Components**: Components receive everything they need as parameters.
+4. **Reusability**: Common UI elements are extracted into reusable components.
+
+## Error Handling
+
+Errors are handled consistently using:
+
+1. **Custom Exceptions**: Domain-specific error types defined in `utils/errors.py`.
+2. **Structured Error Details**: Errors include contextual information.
+3. **Consistent Logging**: All errors are logged with appropriate levels.
+4. **User-Friendly Messages**: Errors are presented to users in a helpful way.
 
 ## Development Guidelines
 
-- **Core Logic**: Focus on keeping the core business logic independent of the UI. This makes it easier to test and reuse.
-- **UI Components**: Build UI components that are reusable and composable. This reduces code duplication and makes the UI more maintainable.
-- **Configuration**: Use the centralized configuration system instead of hardcoding values.
-- **Testing**: Write tests for the core business logic to ensure it works as expected.
-- **Documentation**: Keep this document up to date as the architecture evolves.
+- **Core Logic**: Keep the core business logic independent of the UI.
+- **Services**: Use services to coordinate between different core components.
+- **UI Components**: Build reusable, stateless UI components.
+- **Configuration**: Use the centralized configuration system.
+- **State**: Use the state management utilities instead of accessing session state directly.
+- **Testing**: Write tests for services and core business logic.
+- **Documentation**: Keep this document up to date.
+
+## Design Patterns Used
+
+- **Service Pattern**: Business logic is encapsulated in service classes.
+- **Strategy Pattern**: Different algorithms (e.g., wind estimation) can be selected at runtime.
+- **Repository Pattern**: Data access is abstracted.
+- **Factory Pattern**: Object creation is centralized.
+- **Dependency Injection**: Components receive their dependencies.
 
 ## Future Improvements
 
-- **Complete type hints**: Add proper type hints to all functions to improve code documentation and enable type checking.
-- **Enhance error handling**: Implement more robust error handling throughout the application.
-- **Expand test coverage**: Add more unit tests for the core business logic.
-- **Implement advanced features**: Build on the new architecture to implement advanced features such as gear comparison and analysis.
+- **Data Persistence**: Implement proper data storage for saving and loading analysis.
+- **More Unit Tests**: Expand test coverage, especially for services.
+- **API Layer**: Extract an API layer for potential backend/frontend separation.
+- **Performance Optimization**: Improve performance for large datasets.
+- **Documentation**: Add more developer documentation and examples.
+- **Plugin System**: Support for custom analysis plugins.
