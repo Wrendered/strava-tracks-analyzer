@@ -20,8 +20,21 @@ A Streamlit application for analyzing wingfoil sessions from Strava GPX tracks. 
 ## Installation
 
 1. Clone this repository
-2. Install requirements: `pip install -r requirements.txt`
-3. Run the app: `streamlit run app.py`
+2. Create and activate a virtual environment:
+   ```
+   # Create virtual environment (already included in the repo)
+   python -m venv venv
+   
+   # Activate the virtual environment
+   # On macOS/Linux:
+   source venv/bin/activate
+   # On Windows:
+   venv\Scripts\activate
+   ```
+3. Install requirements in the virtual environment: `pip install -r requirements.txt`
+4. Run the app with the virtual environment activated: `streamlit run app.py`
+
+> **Note**: Always make sure to activate the virtual environment before running the application.
 
 ## Usage
 

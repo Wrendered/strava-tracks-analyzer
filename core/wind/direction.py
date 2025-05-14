@@ -315,9 +315,10 @@ def detect_and_remove_outliers(
         # Normalize wind direction to 0-359 range
         wind_direction = float(wind_direction) % 360
         
-        # Ensure we have angles calculated for the current wind direction
-        from core.segments import analyze_wind_angles
-        stretches_with_angles = analyze_wind_angles(stretches.copy(), wind_direction)
+        # Avoid circular import by using a deferred import within the function
+        # Import from the package (which re-exports the original function)
+        from core.segments import analyze_wind_angles as analyze_wind_angles_fn
+        stretches_with_angles = analyze_wind_angles_fn(stretches.copy(), wind_direction)
         
         # Verify required columns exist
         required_columns = ['angle_to_wind', 'bearing']

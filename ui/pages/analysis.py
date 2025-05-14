@@ -13,6 +13,7 @@ from datetime import timedelta
 # Import from core modules
 from core.gpx import load_gpx_file
 from core.metrics import calculate_track_metrics, calculate_average_angle_from_segments
+# Import directly from the segments package (which now properly re-exports)
 from core.segments import find_consistent_angle_stretches, analyze_wind_angles
 from core.wind.estimate import estimate_wind_direction
 from core.wind.models import WindEstimate

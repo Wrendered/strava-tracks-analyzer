@@ -15,7 +15,8 @@ from core.wind.direction import (
     iterative_wind_estimation,
     estimate_balanced_wind_direction
 )
-from core.segments import analyze_wind_angles
+# Avoid circular import by not importing analyze_wind_angles directly at module level
+# We'll import it inside the functions when needed
 
 logger = logging.getLogger(__name__)
 
@@ -62,8 +63,10 @@ def estimate_wind_direction(
     # Make sure we have wind angles calculated
     if 'angle_to_wind' not in stretches.columns or 'tack' not in stretches.columns:
         try:
+            # Import analyze_wind_angles here to avoid circular import
+            from core.segments import analyze_wind_angles as analyze_wind_angles_fn
             # Use initial wind direction to calculate angles before estimation
-            analyzed_stretches = analyze_wind_angles(stretches.copy(), initial_wind_direction)
+            analyzed_stretches = analyze_wind_angles_fn(stretches.copy(), initial_wind_direction)
         except Exception as e:
             logger.error(f"Error analyzing wind angles: {e}")
             # Default to user input with no confidence
