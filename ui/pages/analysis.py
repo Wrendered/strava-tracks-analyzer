@@ -16,6 +16,11 @@ from core.metrics import calculate_track_metrics, calculate_average_angle_from_s
 from core.segments import find_consistent_angle_stretches, analyze_wind_angles
 from core.wind.estimate import estimate_wind_direction
 from core.wind.models import WindEstimate
+from core.metrics_advanced import (
+    calculate_vmg_upwind,
+    calculate_vmg_downwind,
+    estimate_wind_direction_weighted
+)
 
 # Import UI components
 from ui.components.visualization import display_track_map, plot_polar_diagram
@@ -32,6 +37,10 @@ from config.settings import (
     DEFAULT_SUSPICIOUS_ANGLE_THRESHOLD,
     DEFAULT_WIND_DIRECTION
 )
+
+# Advanced algorithm configuration
+DEFAULT_MIN_SEGMENT_DISTANCE = 50  # Minimum segment distance for algorithms in meters
+DEFAULT_VMG_ANGLE_RANGE = 20       # Range around best angle to include for VMG calculation
 
 logger = logging.getLogger(__name__)
 
@@ -383,11 +392,13 @@ def display_page():
                         analyzed_stretches = analyze_wind_angles(stretches.copy(), user_provided_wind)
                         
                         # Get wind estimate with confidence level
-                        wind_estimate = estimate_wind_direction(
+                        # Use the enhanced distance-weighted wind estimation algorithm
+                        min_segment_distance = DEFAULT_MIN_SEGMENT_DISTANCE
+                        wind_estimate = estimate_wind_direction_weighted(
                             analyzed_stretches.copy(),
                             user_provided_wind,
-                            method="iterative",
-                            suspicious_angle_threshold=suspicious_angle_threshold
+                            suspicious_angle_threshold=suspicious_angle_threshold,
+                            min_segment_distance=min_segment_distance
                         )
                         
                         # If estimation succeeded, use our central update function
@@ -595,32 +606,19 @@ def display_page():
                                             f"{best_starboard['speed']:.1f} knots")
                                     st.caption(f"Bearing: {best_starboard['bearing']:.0f}°")
                                 
-                                # Calculate VMG upwind using improved weighted algorithm
+                                # Calculate VMG upwind using enhanced distance-weighted algorithm
                                 import math
                                 
-                                # Collect upwind segments close to best upwind angle for more focused calculation
-                                upwind_vmg = None
+                                # Use configuration parameters
+                                min_segment_distance = DEFAULT_MIN_SEGMENT_DISTANCE
+                                angle_range = DEFAULT_VMG_ANGLE_RANGE
                                 
-                                if not upwind.empty:
-                                    # First, find the best upwind angle (smallest angle to wind)
-                                    best_upwind_angle = upwind['angle_to_wind'].min()
-                                    
-                                    # Filter to only include segments within 20 degrees of best upwind
-                                    max_angle_threshold = min(best_upwind_angle + 20, 90)
-                                    filtered_upwind = upwind[upwind['angle_to_wind'] <= max_angle_threshold]
-                                    
-                                    if not filtered_upwind.empty:
-                                        # Calculate VMG for each segment and weight by distance
-                                        filtered_upwind['vmg'] = filtered_upwind.apply(
-                                            lambda row: row['speed'] * math.cos(math.radians(row['angle_to_wind'])), axis=1
-                                        )
-                                        
-                                        # Weight by distance - longer segments contribute more to average
-                                        if filtered_upwind['distance'].sum() > 0:
-                                            upwind_vmg = np.average(
-                                                filtered_upwind['vmg'], 
-                                                weights=filtered_upwind['distance']
-                                            )
+                                # Use the advanced algorithm that handles distance weighting properly
+                                upwind_vmg = calculate_vmg_upwind(
+                                    upwind, 
+                                    angle_range=angle_range,
+                                    min_segment_distance=min_segment_distance
+                                )
                                 
                                 # Fallback to original single-best-angle approach if we have both tacks
                                 # but don't have sufficient weighted data
@@ -639,7 +637,7 @@ def display_page():
                                     # Display VMG upwind
                                     st.metric("VMG upwind-ish", 
                                             f"{upwind_vmg:.1f} knots", 
-                                            help="Distance-weighted average of (speed × cos(angle)) for upwind segments within 20° of your best upwind angle. Measures your effective 'comfortable' upwind progress.")
+                                            help=f"Advanced distance-weighted VMG calculation using segments within {angle_range}° of best angle. Prioritizes longer segments (min {min_segment_distance}m) for more accurate representation of upwind performance.")
                                     
                                     # Display session average wind direction - simple average
                                     if 'best_port' in locals() and 'best_starboard' in locals():

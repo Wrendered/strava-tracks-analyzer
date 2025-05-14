@@ -10,6 +10,8 @@ import json
 import uuid
 from datetime import datetime
 
+from core.metrics_advanced import calculate_vmg_upwind, calculate_vmg_downwind
+
 @dataclass
 class GearItem:
     """Class representing a gear setup for comparison."""
@@ -99,31 +101,21 @@ class GearItem:
                             "speed": best_starboard['speed']  # Speed is already in knots in the UI
                         }
                     
-                    # Calculate improved VMG upwind using all upwind segments
+                    # Calculate improved VMG upwind using advanced algorithm
                     import math
                     import numpy as np
                     
-                    # Calculate VMG for segments close to best upwind angle and weight by distance
+                    # Configuration for VMG calculations
+                    min_segment_distance = 50  # Minimum segment distance in meters
+                    angle_range = 20  # Range around best angle to include
+                    
+                    # Use the advanced distance-weighted algorithm
                     if not upwind.empty:
-                        # First, find the best upwind angle (smallest angle to wind)
-                        best_upwind_angle = upwind['angle_to_wind'].min()
-                        
-                        # Filter to only include segments within 20 degrees of best upwind
-                        max_angle_threshold = min(best_upwind_angle + 20, 90)
-                        filtered_upwind = upwind[upwind['angle_to_wind'] <= max_angle_threshold]
-                        
-                        if not filtered_upwind.empty:
-                            # Calculate VMG for each segment
-                            filtered_upwind['vmg'] = filtered_upwind.apply(
-                                lambda row: row['speed'] * math.cos(math.radians(row['angle_to_wind'])), axis=1
-                            )
-                            
-                            # Weight by distance - longer segments contribute more to average
-                            if filtered_upwind['distance'].sum() > 0:
-                                vmg_upwind = np.average(
-                                    filtered_upwind['vmg'], 
-                                    weights=filtered_upwind['distance']
-                                )
+                        vmg_upwind = calculate_vmg_upwind(
+                            upwind,
+                            angle_range=angle_range,
+                            min_segment_distance=min_segment_distance
+                        )
                     
                     # Fallback to original method for backward compatibility
                     # Calculate upwind progress speed when we have both tacks
