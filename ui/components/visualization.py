@@ -97,12 +97,20 @@ def display_track_map(
                     
                     # Add the segment line
                     if len(segment_points) >= 2:
+                        # Create more informative tooltip that emphasizes angle off wind
+                        tooltip_text = (
+                            f"{sailing_type}<br>"
+                            f"<b>Angle off wind:</b> {segment['angle_to_wind']:.1f}°<br>"
+                            f"<b>Speed:</b> {segment['speed']:.1f} knots<br>"
+                            f"<small>Heading: {segment['bearing']:.1f}°</small>"
+                        )
+                        
                         folium.PolyLine(
                             segment_points,
                             color=color,
                             weight=4,
                             opacity=0.8,
-                            tooltip=f"{sailing_type}: {segment['angle_to_wind']:.1f}°, {segment['speed']:.1f} knots"
+                            tooltip=tooltip_text
                         ).add_to(m)
         
         # Add wind direction arrow
