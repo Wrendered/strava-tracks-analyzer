@@ -16,6 +16,14 @@ A Streamlit application for analyzing wingfoil sessions from Strava GPX tracks. 
 - AI-powered gear comparison analysis with Claude
 - Export analysis as CSV for further processing
 - Bulk upload and analysis of multiple tracks
+- Adaptive parameter scaling for long tracks (NEW!)
+
+## Recent Improvements
+
+- **Automatic Parameter Scaling**: The app now automatically optimizes segmentation parameters for long tracks to prevent over-segmentation
+- **Track Segmentation**: Enhanced segment detection with adaptive parameters for different track types
+- **Wind Direction UI**: Improved wind direction selection with visual feedback
+- **Performance Analysis**: Better analytics for upwind and downwind performance
 
 ## Installation
 
@@ -57,6 +65,17 @@ You'll need an Anthropic API key to use this feature. You can set it two ways:
 - Environment variable: `export ANTHROPIC_API_KEY=your_key_here`
 - Or enter it directly in the app when prompted
 
+## Long Track Analysis
+
+For very long tracks (3+ hours) or tracks with many tacks, the application now automatically:
+
+1. Detects over-segmentation based on track characteristics
+2. Dynamically adjusts parameters for optimal segment detection
+3. Shows quality metrics and provides the ability to revert to original parameters
+4. Scales min_distance, min_time, and angle_tolerance proportionally
+
+This ensures consistent analysis quality regardless of track duration or complexity.
+
 ## Dependencies
 
 - streamlit
@@ -86,6 +105,7 @@ strava-tracks-analyzer/
 │   ├── pages/               # Main UI pages
 │   └── components/          # Reusable UI components
 └── utils/                   # Utility functions
+    └── parameter_scaling.py # Adaptive parameter scaling
 ```
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for more details on the project structure.
