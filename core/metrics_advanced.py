@@ -255,8 +255,8 @@ def estimate_wind_direction_weighted(
         user_provided=True,
         port_angle=None,
         starboard_angle=None,
-        has_both_tacks=False,
-        tack_difference=None
+        port_count=0,
+        starboard_count=0
     )
     
     # Validate input
@@ -412,8 +412,8 @@ def estimate_wind_direction_weighted(
                 user_provided=False,
                 port_angle=port_angle,
                 starboard_angle=starboard_angle,
-                has_both_tacks=has_both_tacks,
-                tack_difference=tack_difference
+                port_count=len(port_tack),
+                starboard_count=len(starboard_tack)
             )
     
     except Exception as e:

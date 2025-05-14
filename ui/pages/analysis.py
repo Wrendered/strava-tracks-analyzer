@@ -532,7 +532,18 @@ def display_page():
             display_df = stretches.copy()
             display_df['original_index'] = display_df.index
             display_df = display_df.reset_index()
-            display_df['suspicious'] = display_df['angle_to_wind'] < suspicious_angle_threshold
+            
+            # Make sure we have the angle_to_wind column before checking if suspicious
+            if 'angle_to_wind' in display_df.columns:
+                display_df['suspicious'] = display_df['angle_to_wind'] < suspicious_angle_threshold
+            else:
+                # Recalculate angles if missing
+                logger.warning("angle_to_wind column missing, recalculating")
+                from utils.geo import angle_to_wind as calc_angle
+                wind_direction = st.session_state.get('wind_direction', DEFAULT_WIND_DIRECTION)
+                display_df['angle_to_wind'] = display_df['bearing'].apply(
+                    lambda x: calc_angle(x, wind_direction))
+                display_df['suspicious'] = display_df['angle_to_wind'] < suspicious_angle_threshold
             
             # Rename columns for display
             display_df = display_df.rename(columns={
