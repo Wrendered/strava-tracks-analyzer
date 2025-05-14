@@ -107,6 +107,7 @@ def wind_direction_selector(
                 # Call the callback only when Apply button is clicked
                 if on_change_callback is not None:
                     on_change_callback(user_wind_direction)
+                    # Note: The callback should handle st.rerun(), not needed here
         
     return user_wind_direction
 

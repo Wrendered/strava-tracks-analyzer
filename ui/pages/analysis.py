@@ -44,6 +44,61 @@ DEFAULT_VMG_ANGLE_RANGE = 20       # Range around best angle to include for VMG 
 
 logger = logging.getLogger(__name__)
 
+def recalculate_segments(params_changed=None):
+    """
+    Central function to recalculate segments with current parameters.
+    
+    Args:
+        params_changed: Optional string describing which parameters changed (for logging)
+        
+    Returns:
+        bool: True if recalculation was successful, False otherwise
+    """
+    # Only proceed if we have track data
+    if 'track_data' not in st.session_state or st.session_state.track_data is None:
+        return False
+    
+    try:
+        # Get parameters from session state or use defaults
+        angle_tolerance = st.session_state.get('angle_tolerance', DEFAULT_ANGLE_TOLERANCE)
+        min_duration = st.session_state.get('min_duration', DEFAULT_MIN_DURATION)
+        min_distance = st.session_state.get('min_distance', DEFAULT_MIN_DISTANCE)
+        min_speed = st.session_state.get('min_speed', DEFAULT_MIN_SPEED)
+        wind_direction = st.session_state.get('wind_direction', DEFAULT_WIND_DIRECTION)
+        
+        logger.info(f"Recalculating segments: {params_changed or 'all parameters'} changed")
+        logger.info(f"Using parameters: angle_tolerance={angle_tolerance}°, min_duration={min_duration}s, "
+                   f"min_distance={min_distance}m, min_speed={min_speed}kn, wind_direction={wind_direction}°")
+        
+        # Re-detect stretches from raw data
+        base_stretches = find_consistent_angle_stretches(
+            st.session_state.track_data, 
+            angle_tolerance, 
+            min_duration, 
+            min_distance
+        )
+        
+        # Filter by minimum speed
+        if not base_stretches.empty:
+            logger.info(f"Filtering {len(base_stretches)} stretches by min_speed: {min_speed} knots")
+            
+            # Filter by speed in knots directly - stretches['speed'] is already in knots
+            base_stretches = base_stretches[base_stretches['speed'] >= min_speed]
+            logger.info(f"After filtering: {len(base_stretches)} stretches remain")
+            
+            # Analyze with current wind direction
+            recalculated = analyze_wind_angles(base_stretches, wind_direction)
+            
+            # Update session state
+            st.session_state.track_stretches = recalculated
+            logger.info(f"Successfully recalculated {len(recalculated)} stretches")
+            return True
+    except Exception as e:
+        logger.error(f"Error recalculating segments: {e}")
+        return False
+    
+    return False
+
 def update_wind_direction(new_wind_direction, recalculate_stretches=True):
     """
     Central function to update wind direction and all related calculations.
@@ -71,41 +126,9 @@ def update_wind_direction(new_wind_direction, recalculate_stretches=True):
     if not recalculate_stretches or 'track_stretches' not in st.session_state or st.session_state.track_stretches is None:
         return True
     
-    # If we have base (non-analyzed) track data, we'll use it to regenerate stretches
+    # If we have base (non-analyzed) track data, use the recalculate_segments function
     if 'track_data' in st.session_state and st.session_state.track_data is not None:
-        try:
-            # Get parameters from session state or use defaults
-            angle_tolerance = st.session_state.get('angle_tolerance', DEFAULT_ANGLE_TOLERANCE)
-            min_duration = st.session_state.get('min_duration', DEFAULT_MIN_DURATION)
-            min_distance = st.session_state.get('min_distance', DEFAULT_MIN_DISTANCE)
-            min_speed = st.session_state.get('min_speed', DEFAULT_MIN_SPEED)
-            
-            # Re-detect stretches from raw data
-            base_stretches = find_consistent_angle_stretches(
-                st.session_state.track_data, 
-                angle_tolerance, 
-                min_duration, 
-                min_distance
-            )
-            
-            # Filter by minimum speed
-            if not base_stretches.empty:
-                logger.info(f"Filtering {len(base_stretches)} stretches by min_speed: {min_speed} knots")
-                
-                # Filter by speed in knots directly - stretches['speed'] is already in knots
-                base_stretches = base_stretches[base_stretches['speed'] >= min_speed]
-                logger.info(f"After filtering: {len(base_stretches)} stretches remain")
-                
-                # Analyze with new wind direction
-                recalculated = analyze_wind_angles(base_stretches, new_wind_direction)
-                
-                # Update session state
-                st.session_state.track_stretches = recalculated
-                logger.info(f"Successfully recalculated {len(recalculated)} stretches with wind direction {new_wind_direction}°")
-                return True
-        except Exception as e:
-            logger.error(f"Error recalculating stretches: {e}")
-            return False
+        return recalculate_segments("wind direction")
     
     # Fallback: try to update existing stretches directly
     try:
@@ -139,50 +162,96 @@ def display_page():
         
         # Segment detection parameters
         st.subheader("Segment Detection")
+        
+        # Helper function for slider on_change callbacks
+        def on_param_change():
+            # Recalculate segments and rerun if data is loaded
+            if 'track_data' in st.session_state and st.session_state.track_data is not None:
+                recalculate_segments("segment parameters")
+                st.rerun()
+        
+        # Store current values to detect changes
+        prev_angle_tolerance = st.session_state.get('angle_tolerance', DEFAULT_ANGLE_TOLERANCE)
+        prev_min_duration = st.session_state.get('min_duration', DEFAULT_MIN_DURATION)
+        prev_min_distance = st.session_state.get('min_distance', DEFAULT_MIN_DISTANCE)
+        prev_min_speed = st.session_state.get('min_speed', DEFAULT_MIN_SPEED)
+        
         angle_tolerance = st.slider("Angle Tolerance (°)", 
                                    min_value=5, max_value=30, 
-                                   value=st.session_state.get('angle_tolerance', DEFAULT_ANGLE_TOLERANCE),
-                                   help="How much the bearing can vary within a segment")
+                                   value=prev_angle_tolerance,
+                                   help="How much the bearing can vary within a segment",
+                                   key="angle_tolerance_slider")
         # Store in session state
-        st.session_state.angle_tolerance = angle_tolerance
+        if angle_tolerance != prev_angle_tolerance:
+            st.session_state.angle_tolerance = angle_tolerance
+            on_param_change()
         
         # Minimum criteria
         min_duration = st.slider("Min Duration (sec)", 
                                 min_value=5, max_value=60, 
-                                value=st.session_state.get('min_duration', DEFAULT_MIN_DURATION))
-        st.session_state.min_duration = min_duration
+                                value=prev_min_duration,
+                                key="min_duration_slider")
+        if min_duration != prev_min_duration:
+            st.session_state.min_duration = min_duration
+            on_param_change()
         
         min_distance = st.slider("Min Distance (m)", 
                                 min_value=10, max_value=200, 
-                                value=st.session_state.get('min_distance', DEFAULT_MIN_DISTANCE))
-        st.session_state.min_distance = min_distance
+                                value=prev_min_distance,
+                                key="min_distance_slider")
+        if min_distance != prev_min_distance:
+            st.session_state.min_distance = min_distance
+            on_param_change()
         
         min_speed = st.slider("Min Speed (knots)", 
                              min_value=5.0, max_value=20.0, 
-                             value=st.session_state.get('min_speed', DEFAULT_MIN_SPEED), 
-                             step=0.5)
-        st.session_state.min_speed = min_speed
+                             value=prev_min_speed, 
+                             step=0.5,
+                             key="min_speed_slider")
+        if min_speed != prev_min_speed:
+            st.session_state.min_speed = min_speed
+            on_param_change()
         
         st.subheader("Speed Filter")
+        prev_active_speed_threshold = st.session_state.get('active_speed_threshold', 5.0)
         active_speed_threshold = st.slider("Active Speed Threshold (knots)", 
-                                          min_value=0.0, max_value=10.0, value=5.0, step=0.5,
-                                          help="Speeds below this will be excluded from average speed calculation")
+                                          min_value=0.0, max_value=10.0, value=prev_active_speed_threshold, step=0.5,
+                                          help="Speeds below this will be excluded from average speed calculation",
+                                          key="active_speed_threshold_slider")
+        if active_speed_threshold != prev_active_speed_threshold:
+            st.session_state.active_speed_threshold = active_speed_threshold
+            # This one doesn't need to trigger a full segment recalculation, only metrics
 
         min_speed_ms = min_speed * 0.514444  # Convert knots to m/s
         
         # Technical parameter - but important for accurate analysis
         # Default to 20 degrees - below this is usually not physically possible
+        prev_suspicious_angle_threshold = st.session_state.get('suspicious_angle_threshold', DEFAULT_SUSPICIOUS_ANGLE_THRESHOLD)
         suspicious_angle_threshold = st.slider(
             "Minimum Sailing Angle (°)", 
             min_value=15, 
             max_value=35, 
-            value=st.session_state.get('suspicious_angle_threshold', DEFAULT_SUSPICIOUS_ANGLE_THRESHOLD),
-            help="Angles closer to wind than this are considered physically impossible and excluded from wind direction estimation (20° recommended)"
+            value=prev_suspicious_angle_threshold,
+            help="Angles closer to wind than this are considered physically impossible and excluded from wind direction estimation (20° recommended)",
+            key="suspicious_angle_threshold_slider"
         )
         
-        # Update the threshold in session state
-        st.session_state.suspicious_angle_threshold = suspicious_angle_threshold
+        # Update the threshold in session state and trigger recalculation if changed
+        if suspicious_angle_threshold != prev_suspicious_angle_threshold:
+            st.session_state.suspicious_angle_threshold = suspicious_angle_threshold
+            on_param_change()
             
+        # Add a button to manually recalculate all segments if needed
+        if st.button("🔄 Recalculate All Segments", 
+                   help="Force recalculation of all segments with current parameters",
+                   key="recalculate_all_btn"):
+            success = recalculate_segments("manual recalculation")
+            if success:
+                st.success("Segments successfully recalculated!")
+                st.rerun()
+            else:
+                st.error("Failed to recalculate segments. Please check logs.")
+        
         # Add wind angle explanation at the bottom of the sidebar
         st.divider()
         st.subheader("Wind Angle Explanation")
