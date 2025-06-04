@@ -2,6 +2,10 @@ import math
 from datetime import timedelta
 from geopy.distance import geodesic
 import numpy as np
+from core.constants import (
+    FULL_CIRCLE_DEGREES, METERS_PER_SECOND_TO_KNOTS,
+    METERS_PER_KILOMETER, WARNING_ANGLE_TO_WIND_DEGREES
+)
 
 def calculate_bearing(lat1, lon1, lat2, lon2):
     """Calculate the bearing between two points in degrees."""
@@ -18,7 +22,7 @@ def calculate_bearing(lat1, lon1, lat2, lon2):
     
     # Convert to degrees
     initial_bearing = math.degrees(initial_bearing)
-    compass_bearing = (initial_bearing + 360) % 360
+    compass_bearing = (initial_bearing + FULL_CIRCLE_DEGREES) % FULL_CIRCLE_DEGREES
     
     return compass_bearing
 
@@ -63,7 +67,7 @@ def calculate_track_metrics(gpx_data, min_speed_knots=0.0):
             
             # Calculate distance for this segment
             segment_distance_km = geodesic(point1, point2).kilometers
-            segment_distance_m = segment_distance_km * 1000
+            segment_distance_m = segment_distance_km * METERS_PER_KILOMETER
             distances.append(segment_distance_m)
             
             # Calculate duration and speed if time data available
@@ -77,16 +81,16 @@ def calculate_track_metrics(gpx_data, min_speed_knots=0.0):
                     speeds_m_per_s.append(speed_m_per_s)
         
         # Total distance in kilometers
-        total_distance_km = sum(distances) / 1000
+        total_distance_km = sum(distances) / METERS_PER_KILOMETER
         metrics['distance'] = total_distance_km
         
         # Calculate average speed excluding segments below threshold
         if speeds_m_per_s:
             # Convert speeds to knots for comparison with threshold
-            speeds_knots = [s * 1.94384 for s in speeds_m_per_s]
+            speeds_knots = [s * METERS_PER_SECOND_TO_KNOTS for s in speeds_m_per_s]
             
             # Filter by minimum speed
-            min_speed_ms = min_speed_knots / 1.94384
+            min_speed_ms = min_speed_knots / METERS_PER_SECOND_TO_KNOTS
             active_speeds_ms = [s for s, knots in zip(speeds_m_per_s, speeds_knots) if knots >= min_speed_knots]
             active_durations = [d for d, knots in zip(segment_durations, speeds_knots) if knots >= min_speed_knots]
             
@@ -97,22 +101,22 @@ def calculate_track_metrics(gpx_data, min_speed_knots=0.0):
                 
                 # Calculate metrics
                 metrics['active_duration'] = timedelta(seconds=active_time_s)
-                metrics['active_distance'] = active_distance_m / 1000  # in km
+                metrics['active_distance'] = active_distance_m / METERS_PER_KILOMETER  # in km
                 
                 # Calculate average speed from segments above threshold
                 avg_speed_ms = sum(active_speeds_ms) / len(active_speeds_ms)
-                metrics['avg_speed'] = avg_speed_ms * 1.94384  # Convert to knots
+                metrics['avg_speed'] = avg_speed_ms * METERS_PER_SECOND_TO_KNOTS  # Convert to knots
                 
                 # Calculate weighted average speed (by duration)
                 if active_time_s > 0:
                     weighted_avg_ms = active_distance_m / active_time_s
-                    metrics['weighted_avg_speed'] = weighted_avg_ms * 1.94384
+                    metrics['weighted_avg_speed'] = weighted_avg_ms * METERS_PER_SECOND_TO_KNOTS
                 else:
                     metrics['weighted_avg_speed'] = 0
                 
                 # Calculate "traditional" avg speed over whole track for comparison
-                m_per_s = total_distance_km * 1000 / metrics['total_duration_seconds'] if metrics['total_duration_seconds'] > 0 else 0
-                metrics['overall_avg_speed'] = m_per_s * 1.94384
+                m_per_s = total_distance_km * METERS_PER_KILOMETER / metrics['total_duration_seconds'] if metrics['total_duration_seconds'] > 0 else 0
+                metrics['overall_avg_speed'] = m_per_s * METERS_PER_SECOND_TO_KNOTS
             else:
                 # If there are no segments above the threshold
                 metrics['active_duration'] = timedelta(seconds=0)
@@ -136,7 +140,7 @@ def calculate_track_metrics(gpx_data, min_speed_knots=0.0):
 
 def meters_per_second_to_knots(speed_ms):
     """Convert meters per second to knots."""
-    return speed_ms * 1.94384
+    return speed_ms * METERS_PER_SECOND_TO_KNOTS
 
 def angle_to_wind(bearing, wind_direction):
     """
@@ -156,17 +160,17 @@ def angle_to_wind(bearing, wind_direction):
       - 180° means sailing directly away from the wind (downwind)
     """
     # Ensure input values are within 0-359 range
-    bearing = bearing % 360
-    wind_direction = wind_direction % 360
+    bearing = bearing % FULL_CIRCLE_DEGREES
+    wind_direction = wind_direction % FULL_CIRCLE_DEGREES
     
     # Calculate the absolute difference
     diff = abs(bearing - wind_direction)
     
     # Take the smaller angle (0-180)
-    angle = min(diff, 360 - diff)
+    angle = min(diff, FULL_CIRCLE_DEGREES - diff)
     
     # Log suspicious values but don't modify them - let the user decide
-    if angle < 15:
+    if angle < WARNING_ANGLE_TO_WIND_DEGREES:
         import logging
         logger = logging.getLogger(__name__)
         logger.warning(f"Suspiciously small angle to wind detected: {angle}° " + 

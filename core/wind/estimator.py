@@ -19,6 +19,11 @@ from config.settings import (
     DEFAULT_MAX_ITERATIONS,
     DEFAULT_CONVERGENCE_THRESHOLD
 )
+from core.constants import (
+    HIGH_CONFIDENCE_TACK_DIFF_DEGREES, MEDIUM_CONFIDENCE_TACK_DIFF_DEGREES,
+    MAX_TACK_DIFF_FOR_ADJUSTMENT_DEGREES, FULL_CIRCLE_DEGREES,
+    MIN_SEGMENTS_FOR_ESTIMATION
+)
 
 logger = logging.getLogger(__name__)
 
@@ -102,16 +107,16 @@ class BasicStrategy:
         avg_angle = (port_avg_angle + starboard_avg_angle) / 2
         
         # Determine confidence based on tack difference
-        if tack_difference < 10:
+        if tack_difference < HIGH_CONFIDENCE_TACK_DIFF_DEGREES:
             confidence = "high"
-        elif tack_difference < 20:
+        elif tack_difference < MEDIUM_CONFIDENCE_TACK_DIFF_DEGREES:
             confidence = "medium"
         else:
             confidence = "low"
         
         # Compute the refined wind direction
         # If the difference between tacks is too large, use the initial wind direction
-        if tack_difference > 30:
+        if tack_difference > MAX_TACK_DIFF_FOR_ADJUSTMENT_DEGREES:
             logger.warning(f"Tack difference too large ({tack_difference:.1f}°), using initial wind direction")
             refined_wind = initial_direction
         else:
@@ -211,7 +216,7 @@ class IterativeStrategy:
                 logger.info(f"Wind direction estimation converged after {iteration_count+1} iterations")
             
             # Apply adjustment
-            new_wind = (current_wind + adjustment) % 360
+            new_wind = (current_wind + adjustment) % FULL_CIRCLE_DEGREES
             
             # Update for next iteration
             current_wind = new_wind
@@ -220,9 +225,9 @@ class IterativeStrategy:
         # Determine confidence based on convergence and tack difference
         confidence = "low"
         if converged:
-            if tack_difference < 10:
+            if tack_difference < HIGH_CONFIDENCE_TACK_DIFF_DEGREES:
                 confidence = "high"
-            elif tack_difference < 20:
+            elif tack_difference < MEDIUM_CONFIDENCE_TACK_DIFF_DEGREES:
                 confidence = "medium"
         
         # Only consider the estimate valid if we have both tacks and either converged or did max iterations
@@ -334,9 +339,9 @@ class WeightedStrategy:
         tack_difference = abs(port_weighted_avg - starboard_weighted_avg)
         
         # Determine confidence based on tack difference and number of segments
-        if tack_difference < 10 and port_count >= 3 and starboard_count >= 3:
+        if tack_difference < HIGH_CONFIDENCE_TACK_DIFF_DEGREES and port_count >= MIN_SEGMENTS_FOR_ESTIMATION and starboard_count >= MIN_SEGMENTS_FOR_ESTIMATION:
             confidence = "high"
-        elif tack_difference < 20 and port_count >= 2 and starboard_count >= 2:
+        elif tack_difference < MEDIUM_CONFIDENCE_TACK_DIFF_DEGREES and port_count >= 2 and starboard_count >= 2:
             confidence = "medium"
         else:
             confidence = "low"
@@ -346,7 +351,7 @@ class WeightedStrategy:
         adjustment = (port_weighted_avg - starboard_weighted_avg) / 2
         
         # Apply adjustment to initial wind direction
-        refined_wind = (initial_direction - adjustment) % 360
+        refined_wind = (initial_direction - adjustment) % FULL_CIRCLE_DEGREES
         
         logger.info(f"Estimated wind: {refined_wind:.1f}° (adjustment: {-adjustment:.1f}°)")
         

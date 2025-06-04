@@ -8,6 +8,15 @@ wind direction estimation and VMG calculations.
 
 from core.wind.models import WindEstimate
 from utils.segment_analysis import detect_suspicious_segments
+from core.constants import (
+    QUALITY_WEIGHT_DISTANCE, QUALITY_WEIGHT_SPEED, QUALITY_WEIGHT_DURATION,
+    QUALITY_SCORE_FACTOR, DEFAULT_SUSPICIOUS_ANGLE_THRESHOLD,
+    UPWIND_DOWNWIND_BOUNDARY_DEGREES, ANGLE_WRAP_BOUNDARY_DEGREES,
+    DEFAULT_VMG_ANGLE_RANGE_DEGREES, DEFAULT_MIN_SEGMENT_DISTANCE_METERS,
+    MIN_SEGMENTS_FOR_ESTIMATION, MIN_RELIABLE_SEGMENT_LENGTH_METERS,
+    MEDIUM_CONFIDENCE_TACK_DIFF_DEGREES, HIGH_CONFIDENCE_MIN_DISTANCE_METERS,
+    MAX_TACK_DIFF_FOR_ADJUSTMENT_DEGREES, FULL_CIRCLE_DEGREES
+)
 
 import pandas as pd
 import numpy as np
@@ -37,41 +46,41 @@ def calculate_segment_quality_score(segments: pd.DataFrame) -> pd.Series:
         return pd.Series()
     
     # Initialize with base value
-    quality_score = pd.Series(0.5, index=segments.index)
+    quality_score = pd.Series(QUALITY_WEIGHT_DISTANCE, index=segments.index)
     
     # Distance is the primary factor (50%)
     if 'distance' in segments.columns:
         max_distance = segments['distance'].max()
         if max_distance > 0:
             normalized_distance = segments['distance'] / max_distance
-            # Distance contributes 50% to the score
-            quality_score = 0.5 * normalized_distance
+            # Distance contributes to the score based on weight
+            quality_score = QUALITY_WEIGHT_DISTANCE * normalized_distance
         else:
             # If all distances are 0, assign equal weight
-            quality_score = pd.Series(0.5, index=segments.index)
+            quality_score = pd.Series(QUALITY_WEIGHT_DISTANCE, index=segments.index)
     
     # Speed factor (30%) if available
     if 'speed' in segments.columns:
         max_speed = segments['speed'].max()
         if max_speed > 0:
             normalized_speed = segments['speed'] / max_speed
-            # Speed contributes 30% to quality score
-            quality_score += 0.3 * normalized_speed
+            # Speed contributes to quality score based on weight
+            quality_score += QUALITY_WEIGHT_SPEED * normalized_speed
     
     # Duration factor (20%) if available
     if 'duration' in segments.columns:
         max_duration = segments['duration'].max()
         if max_duration > 0:
             normalized_duration = segments['duration'] / max_duration
-            # Duration contributes 20% to quality score
-            quality_score += 0.2 * normalized_duration
+            # Duration contributes to quality score based on weight
+            quality_score += QUALITY_WEIGHT_DURATION * normalized_duration
     
     return quality_score
 
 def calculate_vmg_upwind(
     upwind_segments: pd.DataFrame,
-    angle_range: float = 20,
-    min_segment_distance: float = 50
+    angle_range: float = DEFAULT_VMG_ANGLE_RANGE_DEGREES,
+    min_segment_distance: float = DEFAULT_MIN_SEGMENT_DISTANCE_METERS
 ) -> Optional[float]:
     """
     Calculate improved VMG upwind with distance weighting.
@@ -99,7 +108,7 @@ def calculate_vmg_upwind(
         # Step 1: Filter out suspicious segments first
         suspicious_segments = detect_suspicious_segments(
             upwind_segments,
-            min_angle_to_wind=20.0,  # Minimum reasonable angle to wind
+            min_angle_to_wind=DEFAULT_SUSPICIOUS_ANGLE_THRESHOLD,  # Minimum reasonable angle to wind
             min_segment_length=min_segment_distance  # Use the provided minimum distance
         )
         
@@ -128,14 +137,14 @@ def calculate_vmg_upwind(
             
             # The segment with the highest quality score and smallest angle is our "best" angle
             # We combine quality and angle with a weighted approach
-            filtered_upwind['combined_score'] = filtered_upwind['angle_to_wind'] - (quality_scores * 10)
+            filtered_upwind['combined_score'] = filtered_upwind['angle_to_wind'] - (quality_scores * QUALITY_SCORE_FACTOR)
             best_segment = filtered_upwind.sort_values('combined_score').iloc[0]
             weighted_best_angle = best_segment['angle_to_wind']
             
             logger.info(f"Best upwind angle (distance-weighted): {weighted_best_angle:.1f}°")
             
             # Step 3: Filter to segments within range of best angle
-            max_angle_threshold = min(weighted_best_angle + angle_range, 90)
+            max_angle_threshold = min(weighted_best_angle + angle_range, UPWIND_DOWNWIND_BOUNDARY_DEGREES)
             angle_filtered = filtered_upwind[filtered_upwind['angle_to_wind'] <= max_angle_threshold]
             
             if not angle_filtered.empty:
@@ -167,8 +176,8 @@ def calculate_vmg_upwind(
 
 def calculate_vmg_downwind(
     downwind_segments: pd.DataFrame,
-    angle_range: float = 20,
-    min_segment_distance: float = 50
+    angle_range: float = DEFAULT_VMG_ANGLE_RANGE_DEGREES,
+    min_segment_distance: float = DEFAULT_MIN_SEGMENT_DISTANCE_METERS
 ) -> Optional[float]:
     """
     Calculate improved VMG downwind with distance weighting.
@@ -206,7 +215,7 @@ def calculate_vmg_downwind(
             quality_scores = calculate_segment_quality_score(filtered_downwind)
             
             # For downwind, higher angle is better, so we reverse the order with negative sign
-            filtered_downwind['combined_score'] = -filtered_downwind['angle_to_wind'] - (quality_scores * 10)
+            filtered_downwind['combined_score'] = -filtered_downwind['angle_to_wind'] - (quality_scores * QUALITY_SCORE_FACTOR)
             best_segment = filtered_downwind.sort_values('combined_score').iloc[0]
             weighted_best_angle = best_segment['angle_to_wind']
             
@@ -214,14 +223,14 @@ def calculate_vmg_downwind(
             
             # Step 3: Filter to segments within range of best angle
             # For downwind, we want angles LARGER than (best_angle - range)
-            min_angle_threshold = max(weighted_best_angle - angle_range, 90)
+            min_angle_threshold = max(weighted_best_angle - angle_range, UPWIND_DOWNWIND_BOUNDARY_DEGREES)
             angle_filtered = filtered_downwind[filtered_downwind['angle_to_wind'] >= min_angle_threshold]
             
             if not angle_filtered.empty:
                 # Step 4: Calculate VMG for each segment
                 angle_filtered = angle_filtered.copy()  # Make a copy to avoid SettingWithCopyWarning
                 angle_filtered['vmg'] = angle_filtered.apply(
-                    lambda row: row['speed'] * math.cos(math.radians(180 - row['angle_to_wind'])), axis=1
+                    lambda row: row['speed'] * math.cos(math.radians(ANGLE_WRAP_BOUNDARY_DEGREES - row['angle_to_wind'])), axis=1
                 )
                 
                 # Step 5: Weight by distance
@@ -242,8 +251,8 @@ def calculate_vmg_downwind(
 def estimate_wind_direction_weighted(
     stretches: pd.DataFrame,
     user_wind_direction: float,
-    suspicious_angle_threshold: float = 20,
-    min_segment_distance: float = 50
+    suspicious_angle_threshold: float = DEFAULT_SUSPICIOUS_ANGLE_THRESHOLD,
+    min_segment_distance: float = DEFAULT_MIN_SEGMENT_DISTANCE_METERS
 ) -> WindEstimate:
     """
     Estimate wind direction by balancing port and starboard tacks with distance weighting.
@@ -288,16 +297,16 @@ def estimate_wind_direction_weighted(
     
     try:
         # Normalize user wind direction
-        user_wind_direction = float(user_wind_direction) % 360
+        user_wind_direction = float(user_wind_direction) % FULL_CIRCLE_DEGREES
         
         # Step 1: Filter upwind segments (angle_to_wind < 90°)
-        upwind = stretches[stretches['angle_to_wind'] < 90].copy()
+        upwind = stretches[stretches['angle_to_wind'] < UPWIND_DOWNWIND_BOUNDARY_DEGREES].copy()
         
         # Step 2: Filter out suspicious segments using our enhanced analysis
         suspicious_segments = detect_suspicious_segments(
             upwind,
             min_angle_to_wind=suspicious_angle_threshold,
-            min_segment_length=30.0  # 30 meters minimum for reliable segments
+            min_segment_length=MIN_RELIABLE_SEGMENT_LENGTH_METERS  # minimum for reliable segments
         )
         
         # Keep only non-suspicious segments
@@ -317,12 +326,12 @@ def estimate_wind_direction_weighted(
             logger.info(f"Filtered to {len(upwind)} upwind segments with distance >= {min_segment_distance}m")
             
             # If too few segments remain after filtering, fall back to all segments
-            if len(upwind) < 3 and len(upwind_all) >= 3:
+            if len(upwind) < MIN_SEGMENTS_FOR_ESTIMATION and len(upwind_all) >= MIN_SEGMENTS_FOR_ESTIMATION:
                 logger.warning(f"Too few segments ({len(upwind)}) meet distance criteria. Using all upwind segments.")
                 upwind = upwind_all
         
-        # Need at least 3 segments for reliable estimation
-        if len(upwind) < 3:
+        # Need at least minimum segments for reliable estimation
+        if len(upwind) < MIN_SEGMENTS_FOR_ESTIMATION:
             logger.warning(f"Insufficient upwind segments ({len(upwind)}) for reliable wind estimation")
             return result
         
@@ -391,7 +400,7 @@ def estimate_wind_direction_weighted(
             
             # Apply weighted adjustment to user wind direction
             wind_adjustment = angle_difference / 2.0
-            estimated_wind = (user_wind_direction - wind_adjustment) % 360
+            estimated_wind = (user_wind_direction - wind_adjustment) % FULL_CIRCLE_DEGREES
             
             logger.info(f"Estimated wind: {estimated_wind:.1f}° (adjustment: {wind_adjustment:.1f}°)")
             
@@ -402,14 +411,14 @@ def estimate_wind_direction_weighted(
             # 1. We have several segments in each tack
             # 2. Port and starboard angles are reasonably similar
             # 3. We have significant total distance
-            if (len(port_tack) >= 3 and len(starboard_tack) >= 3 and
-                tack_difference < 20 and total_distance > 500):
+            if (len(port_tack) >= MIN_SEGMENTS_FOR_ESTIMATION and len(starboard_tack) >= MIN_SEGMENTS_FOR_ESTIMATION and
+                tack_difference < MEDIUM_CONFIDENCE_TACK_DIFF_DEGREES and total_distance > HIGH_CONFIDENCE_MIN_DISTANCE_METERS):
                 confidence = "high"
             
             # Lower confidence if:
             # 1. Port and starboard angles differ greatly
             # 2. We have few segments in either tack
-            if tack_difference > 45 or (len(port_tack) < 2 or len(starboard_tack) < 2):
+            if tack_difference > MAX_TACK_DIFF_FOR_ADJUSTMENT_DEGREES or (len(port_tack) < 2 or len(starboard_tack) < 2):
                 confidence = "low"
         else:
             # Single-tack estimation (less reliable)
@@ -420,7 +429,7 @@ def estimate_wind_direction_weighted(
                 port_bearings = port_tack['bearing'].values
                 # Take the weighted average bearing
                 port_bearing = np.average(port_bearings, weights=port_tack['distance'].values)
-                estimated_wind = (port_bearing + port_angle) % 360
+                estimated_wind = (port_bearing + port_angle) % FULL_CIRCLE_DEGREES
                 logger.info(f"Estimated wind from port tack only: {estimated_wind:.1f}°")
             
             elif starboard_angle is not None:
@@ -428,7 +437,7 @@ def estimate_wind_direction_weighted(
                 starboard_bearings = starboard_tack['bearing'].values
                 # Take the weighted average bearing
                 starboard_bearing = np.average(starboard_bearings, weights=starboard_tack['distance'].values)
-                estimated_wind = (starboard_bearing - starboard_angle) % 360
+                estimated_wind = (starboard_bearing - starboard_angle) % FULL_CIRCLE_DEGREES
                 logger.info(f"Estimated wind from starboard tack only: {estimated_wind:.1f}°")
         
         # If we have an estimate, return it

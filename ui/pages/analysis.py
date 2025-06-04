@@ -23,6 +23,7 @@ from core.metrics_advanced import (
     calculate_vmg_downwind,
     estimate_wind_direction_weighted
 )
+from core.wind_estimation_fixed import estimate_wind_direction_iterative
 
 # Import UI components
 from ui.components.visualization import display_track_map, plot_polar_diagram
@@ -520,17 +521,15 @@ def display_page():
                         # Store the current file name for tracking
                         st.session_state.current_file_name = uploaded_file.name
                         
-                        # Use the new unified wind estimation API
-                        analyzed_stretches = analyze_wind_angles(stretches.copy(), user_provided_wind)
-                        
                         # Get wind estimate with confidence level
-                        # Use the enhanced distance-weighted wind estimation algorithm
+                        # Use the FIXED iterative wind estimation algorithm with reclassification
                         min_segment_distance = DEFAULT_MIN_SEGMENT_DISTANCE
-                        wind_estimate = estimate_wind_direction_weighted(
-                            analyzed_stretches.copy(),
+                        wind_estimate = estimate_wind_direction_iterative(
+                            stretches.copy(),  # Pass original segments - algorithm will analyze internally
                             user_provided_wind,
                             suspicious_angle_threshold=suspicious_angle_threshold,
-                            min_segment_distance=min_segment_distance
+                            min_segment_distance=min_segment_distance,
+                            max_iterations=5
                         )
                         
                         # If estimation succeeded, use our central update function

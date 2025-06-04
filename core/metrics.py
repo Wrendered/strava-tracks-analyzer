@@ -11,6 +11,7 @@ import numpy as np
 from typing import Dict, Any, List, Optional, Union
 from geopy.distance import geodesic
 from utils.geo import meters_per_second_to_knots, knots_to_meters_per_second
+from core.constants import METERS_PER_KILOMETER
 
 def calculate_track_metrics(gpx_data: pd.DataFrame, min_speed_knots: float = 0.0) -> Dict[str, Any]:
     """
@@ -63,7 +64,7 @@ def calculate_track_metrics(gpx_data: pd.DataFrame, min_speed_knots: float = 0.0
             
             # Calculate distance for this segment
             segment_distance_km = geodesic(point1, point2).kilometers
-            segment_distance_m = segment_distance_km * 1000
+            segment_distance_m = segment_distance_km * METERS_PER_KILOMETER
             distances.append(segment_distance_m)
             
             # Calculate duration and speed if time data available
@@ -77,7 +78,7 @@ def calculate_track_metrics(gpx_data: pd.DataFrame, min_speed_knots: float = 0.0
                     speeds_m_per_s.append(speed_m_per_s)
         
         # Total distance in kilometers
-        total_distance_km = sum(distances) / 1000
+        total_distance_km = sum(distances) / METERS_PER_KILOMETER
         metrics['distance'] = total_distance_km
         
         # Calculate average speed excluding segments below threshold
@@ -97,7 +98,7 @@ def calculate_track_metrics(gpx_data: pd.DataFrame, min_speed_knots: float = 0.0
                 
                 # Calculate metrics
                 metrics['active_duration'] = timedelta(seconds=active_time_s)
-                metrics['active_distance'] = active_distance_m / 1000  # in km
+                metrics['active_distance'] = active_distance_m / METERS_PER_KILOMETER  # in km
                 
                 # Calculate average speed from segments above threshold
                 avg_speed_ms = sum(active_speeds_ms) / len(active_speeds_ms)
@@ -111,7 +112,7 @@ def calculate_track_metrics(gpx_data: pd.DataFrame, min_speed_knots: float = 0.0
                     metrics['weighted_avg_speed'] = 0
                 
                 # Calculate "traditional" avg speed over whole track for comparison
-                m_per_s = total_distance_km * 1000 / metrics['total_duration_seconds'] if metrics['total_duration_seconds'] > 0 else 0
+                m_per_s = total_distance_km * METERS_PER_KILOMETER / metrics['total_duration_seconds'] if metrics['total_duration_seconds'] > 0 else 0
                 metrics['overall_avg_speed'] = meters_per_second_to_knots(m_per_s)
             else:
                 # If there are no segments above the threshold

@@ -12,25 +12,34 @@ from typing import Dict, List, Optional, Tuple, Union, Callable, Any
 from sklearn.cluster import KMeans
 
 from core.wind.models import WindEstimate
+from core.constants import (
+    DEFAULT_SUSPICIOUS_ANGLE_THRESHOLD, UPWIND_DOWNWIND_BOUNDARY_DEGREES,
+    MIN_SEGMENTS_FOR_ESTIMATION, ANGLE_WRAP_BOUNDARY_DEGREES,
+    FULL_CIRCLE_DEGREES, ANGLE_CLUSTER_RANGE_DEGREES,
+    MIN_ANGLE_CLUSTER_RANGE_DEGREES, MAX_WIND_ADJUSTMENT_DEGREES,
+    MAX_FILTER_PERCENTAGE, SEGMENT_PERCENTAGE_FACTOR,
+    EFFICIENCY_SCORE_DIVISOR, MIN_ADAPTIVE_SEGMENTS,
+    WIND_CONVERGENCE_THRESHOLD_DEGREES
+)
 
 logger = logging.getLogger(__name__)
 
 def estimate_wind_direction_from_upwind_tacks(
     stretches: pd.DataFrame, 
-    suspicious_angle_threshold: float = 20
+    suspicious_angle_threshold: float = DEFAULT_SUSPICIOUS_ANGLE_THRESHOLD
 ) -> Optional[float]:
     """
     SIMPLIFIED algorithm to estimate wind direction based on upwind tacks.
     
     This method:
     1. Selects upwind segments (angle_to_wind < 90°)
-    2. Filters out suspicious angles (<20° to wind)
+    2. Filters out suspicious angles (< threshold to wind)
     3. Gets average angles for port and starboard tacks
     4. Calculates wind direction from the bisector of the best port and starboard tracks
     
     Args:
         stretches: DataFrame with sailing segments
-        suspicious_angle_threshold: Angles less than this are excluded (default: 20°)
+        suspicious_angle_threshold: Angles less than this are excluded
     
     Returns:
         float: Estimated wind direction or None if insufficient data
@@ -90,16 +99,16 @@ def estimate_wind_direction_from_upwind_tacks(
     # If we have both tacks, use the bisector
     if port_best_bearing is not None and starboard_best_bearing is not None:
         # Handle angle wrapping around 0/360
-        if abs(port_best_bearing - starboard_best_bearing) > 180:
+        if abs(port_best_bearing - starboard_best_bearing) > ANGLE_WRAP_BOUNDARY_DEGREES:
             if port_best_bearing < starboard_best_bearing:
-                port_best_bearing += 360
+                port_best_bearing += FULL_CIRCLE_DEGREES
             else:
-                starboard_best_bearing += 360
+                starboard_best_bearing += FULL_CIRCLE_DEGREES
         
         # Simple 50/50 average - no weighting
         bisector = (port_best_bearing + starboard_best_bearing) / 2
-        if bisector >= 360:
-            bisector -= 360
+        if bisector >= FULL_CIRCLE_DEGREES:
+            bisector -= FULL_CIRCLE_DEGREES
             
         # The wind direction is the bisector
         estimated_wind = bisector
@@ -125,7 +134,7 @@ def estimate_wind_direction_from_upwind_tacks(
 def estimate_balanced_wind_direction(
     stretches: pd.DataFrame, 
     user_wind_direction: float, 
-    suspicious_angle_threshold: float = 20, 
+    suspicious_angle_threshold: float = DEFAULT_SUSPICIOUS_ANGLE_THRESHOLD, 
     filter_suspicious: bool = True
 ) -> Optional[float]:
     """
@@ -149,7 +158,7 @@ def estimate_balanced_wind_direction(
     Args:
         stretches: DataFrame with sailing segments (must have wind_direction and angle_to_wind)
         user_wind_direction: User's estimate of wind direction 
-        suspicious_angle_threshold: Angles < this are excluded (usually 20°)
+        suspicious_angle_threshold: Angles < this are excluded
         filter_suspicious: Whether to filter out suspicious angles before estimation
     
     Returns:
@@ -216,8 +225,8 @@ def estimate_balanced_wind_direction(
             best_port = port_sorted.iloc[0]
             best_port_angle = best_port['angle_to_wind']
             
-            # Select all port segments within 15° of the best angle
-            cluster_range = min(15, max(5, len(port_tack) * 0.2))  # Adaptive range based on data
+            # Select all port segments within range of the best angle
+            cluster_range = min(ANGLE_CLUSTER_RANGE_DEGREES, max(MIN_ANGLE_CLUSTER_RANGE_DEGREES, len(port_tack) * SEGMENT_PERCENTAGE_FACTOR))  # Adaptive range based on data
             port_cluster = port_tack[np.abs(port_tack['angle_to_wind'] - best_port_angle) <= cluster_range]
             
             # Take up to 5 best segments (or fewer if not enough in the cluster)
@@ -245,7 +254,7 @@ def estimate_balanced_wind_direction(
             best_starboard_angle = best_starboard['angle_to_wind']
             
             # Select all starboard segments within adaptive range of the best angle
-            cluster_range = min(15, max(5, len(starboard_tack) * 0.2))
+            cluster_range = min(ANGLE_CLUSTER_RANGE_DEGREES, max(MIN_ANGLE_CLUSTER_RANGE_DEGREES, len(starboard_tack) * SEGMENT_PERCENTAGE_FACTOR))
             starboard_cluster = starboard_tack[np.abs(starboard_tack['angle_to_wind'] - best_starboard_angle) <= cluster_range]
             
             # Take up to 5 best segments (or fewer if not enough in the cluster)
@@ -294,7 +303,7 @@ def estimate_balanced_wind_direction(
 def detect_and_remove_outliers(
     stretches: pd.DataFrame, 
     wind_direction: float, 
-    suspicious_angle_threshold: float = 20
+    suspicious_angle_threshold: float = DEFAULT_SUSPICIOUS_ANGLE_THRESHOLD
 ) -> Tuple[pd.DataFrame, bool]:
     """
     Detect improbable upwind angles based on the current wind direction.
@@ -345,12 +354,12 @@ def detect_and_remove_outliers(
             if len(suspicious_segments) > 10:
                 logger.warning(f"... and {len(suspicious_segments) - 10} more suspicious angles")
             
-            # Don't remove too many segments at once (max 25% of total)
-            if len(suspicious_segments) > len(stretches) * 0.25:
+            # Don't remove too many segments at once (max percentage of total)
+            if len(suspicious_segments) > len(stretches) * MAX_FILTER_PERCENTAGE:
                 logger.warning(f"Too many suspicious segments ({len(suspicious_segments)} of {len(stretches)}). " +
-                              f"Limiting to most extreme 25%")
+                              f"Limiting to most extreme {MAX_FILTER_PERCENTAGE*100:.0f}%")
                 # Sort by angle and take only the most suspicious ones
-                suspicious_segments = suspicious_segments.sort_values('angle_to_wind').head(int(len(stretches) * 0.25))
+                suspicious_segments = suspicious_segments.sort_values('angle_to_wind').head(int(len(stretches) * MAX_FILTER_PERCENTAGE))
             
             # Remove suspicious segments
             filtered_stretches = stretches.drop(suspicious_segments.index)
@@ -366,7 +375,7 @@ def detect_and_remove_outliers(
 def iterative_wind_estimation(
     stretches: pd.DataFrame, 
     initial_wind_direction: float, 
-    suspicious_angle_threshold: float = 20, 
+    suspicious_angle_threshold: float = DEFAULT_SUSPICIOUS_ANGLE_THRESHOLD, 
     max_iterations: int = 3
 ) -> Optional[float]:
     """
