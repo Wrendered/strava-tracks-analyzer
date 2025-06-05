@@ -23,7 +23,7 @@ from core.metrics_advanced import (
     calculate_vmg_downwind,
     estimate_wind_direction_weighted
 )
-from core.wind_estimation_fixed import estimate_wind_direction_iterative
+from core.wind.algorithms import estimate_wind_direction_iterative
 
 # Import UI components
 from ui.components.visualization import display_track_map, plot_polar_diagram

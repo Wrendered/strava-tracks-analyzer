@@ -253,10 +253,16 @@ def estimate_wind_direction(stretches, use_simple_method=True, user_wind_directi
     Returns:
     - Estimated wind direction in degrees, or None if estimation fails
     """
-    from core.wind_estimation_orchestrator import estimate_wind_direction_orchestrated
+    from core.wind.algorithms import estimate_wind_direction_iterative
     
-    return estimate_wind_direction_orchestrated(
-        segments=stretches,
-        use_simple_method=use_simple_method,
-        user_wind_direction=user_wind_direction
-    )
+    # Use the fixed iterative algorithm if we have a user wind direction
+    if user_wind_direction is not None:
+        return estimate_wind_direction_iterative(
+            stretches,
+            user_wind_direction,
+            max_iterations=5
+        ).direction
+    
+    # Fallback for cases without user input
+    logger.warning("No user wind direction provided for estimation")
+    return None
