@@ -1,156 +1,30 @@
-import pandas as pd
-import numpy as np
-from sklearn.cluster import KMeans
-from utils.calculations import calculate_bearing, calculate_distance, angle_to_wind
+"""
+Legacy analysis module - now re-exports from consolidated modules.
+
+This module maintains backward compatibility while delegating to the 
+properly organized modules in core.
+"""
+
+# Re-export segment detection from core.segments
+from core.segments import find_consistent_angle_stretches
+
+# Re-export wind analysis from core.calculations 
+from core.calculations import analyze_wind_angles
+
+# Re-export wind estimation from core.wind
+from core.wind.algorithms import estimate_wind_direction_iterative
+
+# Simple upwind tack estimation (kept here for now since it's used by wind algorithms)
 from core.constants import (
-    FULL_CIRCLE_DEGREES, ANGLE_WRAP_BOUNDARY_DEGREES,
-    UPWIND_DOWNWIND_BOUNDARY_DEGREES, DEFAULT_SUSPICIOUS_ANGLE_THRESHOLD,
-    METERS_PER_SECOND_TO_KNOTS, MIN_SEGMENTS_FOR_ESTIMATION,
-    WIND_SEARCH_RANGE_DEGREES, WIND_SEARCH_RANGE_WIDTH_DEGREES,
-    WIND_SEARCH_STEP_DEGREES, DISTANCE_QUANTILE_THRESHOLD,
-    MAX_KMEANS_CLUSTERS, KMEANS_N_INIT, MIN_SCORE_FOR_USER_GUIDED,
-    MIN_SCORE_FOR_MULTI_ANGLE, ANGLE_CLUSTER_RANGE_DEGREES
+    DEFAULT_SUSPICIOUS_ANGLE_THRESHOLD, UPWIND_DOWNWIND_BOUNDARY_DEGREES,
+    MIN_SEGMENTS_FOR_ESTIMATION, ANGLE_WRAP_BOUNDARY_DEGREES, FULL_CIRCLE_DEGREES
 )
+import numpy as np
+import pandas as pd
+import logging
 
-def find_consistent_angle_stretches(df, angle_tolerance, min_duration_seconds, min_distance_meters):
-    """Find stretches of consistent sailing angle."""
-    if len(df) < 2:
-        return pd.DataFrame()
-    
-    # Calculate bearing and distance for each point
-    bearings = []
-    distances = []
-    durations = []
-    
-    for i in range(len(df) - 1):
-        lat1, lon1 = df.iloc[i]['latitude'], df.iloc[i]['longitude']
-        lat2, lon2 = df.iloc[i+1]['latitude'], df.iloc[i+1]['longitude']
-        
-        bearing = calculate_bearing(lat1, lon1, lat2, lon2)
-        distance = calculate_distance(lat1, lon1, lat2, lon2)
-        
-        bearings.append(bearing)
-        distances.append(distance)
-        
-        if i > 0 and 'time' in df.columns and df.iloc[i]['time'] is not None and df.iloc[i-1]['time'] is not None:
-            duration = (df.iloc[i]['time'] - df.iloc[i-1]['time']).total_seconds()
-            durations.append(duration)
-        else:
-            durations.append(0)
-    
-    # Add one more to match length of dataframe
-    bearings.append(bearings[-1] if bearings else 0)
-    distances.append(distances[-1] if distances else 0)
-    durations.append(durations[-1] if durations else 0)
-    
-    df = df.copy()
-    df['bearing'] = bearings
-    df['distance_m'] = distances
-    df['duration_sec'] = durations
-    
-    # Find stretches of consistent angle
-    stretches = []
-    current_stretch = {'start_idx': 0, 'start_time': df.iloc[0]['time'], 'bearing': bearings[0]}
-    
-    for i in range(1, len(df)):
-        angle_diff = min((df.iloc[i]['bearing'] - current_stretch['bearing']) % FULL_CIRCLE_DEGREES, 
-                         (current_stretch['bearing'] - df.iloc[i]['bearing']) % FULL_CIRCLE_DEGREES)
-        
-        if angle_diff > angle_tolerance:
-            # End of stretch
-            end_idx = i - 1
-            end_time = df.iloc[end_idx]['time']
-            
-            # Calculate metrics for this stretch
-            stretch_data = df.iloc[current_stretch['start_idx']:i]
-            
-            if len(stretch_data) > 1:
-                total_distance = stretch_data['distance_m'].sum()
-                total_duration = (end_time - current_stretch['start_time']).total_seconds()
-                
-                # Only keep stretches that meet minimum requirements
-                if total_distance >= min_distance_meters and total_duration >= min_duration_seconds:
-                    # Calculate average speed for this stretch
-                    avg_speed_ms = total_distance / total_duration if total_duration > 0 else 0
-                    avg_speed_knots = avg_speed_ms * METERS_PER_SECOND_TO_KNOTS
-                    
-                    stretch = {
-                        'start_time': current_stretch['start_time'],
-                        'end_time': end_time,
-                        'start_idx': current_stretch['start_idx'],
-                        'end_idx': end_idx,
-                        'bearing': current_stretch['bearing'],
-                        'distance': total_distance,
-                        'duration': total_duration,
-                        'avg_speed_knots': avg_speed_knots,
-                        'point_count': len(stretch_data)
-                    }
-                    stretches.append(stretch)
-            
-            # Start new stretch
-            current_stretch = {'start_idx': i, 'start_time': df.iloc[i]['time'], 'bearing': df.iloc[i]['bearing']}
-    
-    # Handle the last stretch
-    if current_stretch['start_idx'] < len(df) - 1:
-        end_idx = len(df) - 1
-        end_time = df.iloc[end_idx]['time']
-        stretch_data = df.iloc[current_stretch['start_idx']:]
-        
-        if len(stretch_data) > 1:
-            total_distance = stretch_data['distance_m'].sum()
-            total_duration = (end_time - current_stretch['start_time']).total_seconds()
-            
-            if total_distance >= min_distance_meters and total_duration >= min_duration_seconds:
-                avg_speed_ms = total_distance / total_duration if total_duration > 0 else 0
-                avg_speed_knots = avg_speed_ms * METERS_PER_SECOND_TO_KNOTS
-                
-                stretch = {
-                    'start_time': current_stretch['start_time'],
-                    'end_time': end_time,
-                    'start_idx': current_stretch['start_idx'],
-                    'end_idx': end_idx,
-                    'bearing': current_stretch['bearing'],
-                    'distance': total_distance,
-                    'duration': total_duration,
-                    'avg_speed_knots': avg_speed_knots,
-                    'point_count': len(stretch_data)
-                }
-                stretches.append(stretch)
-    
-    # Convert to DataFrame
-    if stretches:
-        result_df = pd.DataFrame(stretches)
-        # Speed is already converted to knots in avg_speed_knots column
-        return result_df
-    else:
-        return pd.DataFrame()
+logger = logging.getLogger(__name__)
 
-def analyze_wind_angles(stretches, wind_direction):
-    """
-    Analyze sailing stretches against a given wind direction.
-    
-    Adds columns for angle_to_wind and tack to the stretches DataFrame.
-    """
-    import logging
-    logger = logging.getLogger(__name__)
-    
-    # Create a copy to avoid modifying the original
-    result = stretches.copy()
-    
-    # Calculate angle to wind for each stretch
-    result['angle_to_wind'] = result['bearing'].apply(
-        lambda bearing: angle_to_wind(bearing, wind_direction)
-    )
-    
-    # Determine if upwind or downwind
-    result['direction'] = result.apply(
-        lambda row: 'Upwind' if row['angle_to_wind'] < UPWIND_DOWNWIND_BOUNDARY_DEGREES else 'Downwind', axis=1)
-    
-    # Determine tack (port or starboard)
-    result['tack'] = result['bearing'].apply(
-        lambda x: 'Port' if (x - wind_direction) % FULL_CIRCLE_DEGREES <= ANGLE_WRAP_BOUNDARY_DEGREES else 'Starboard')
-    
-    return result
 
 def estimate_wind_direction_from_upwind_tacks(stretches, suspicious_angle_threshold=DEFAULT_SUSPICIOUS_ANGLE_THRESHOLD):
     """
@@ -169,9 +43,6 @@ def estimate_wind_direction_from_upwind_tacks(stretches, suspicious_angle_thresh
     Returns:
     - Estimated wind direction or None if insufficient data
     """
-    import logging
-    logger = logging.getLogger(__name__)
-    
     logger.info("Starting upwind tack analysis for wind direction estimation")
     
     # Filter to upwind segments only and exclude suspicious angles
@@ -238,6 +109,7 @@ def estimate_wind_direction_from_upwind_tacks(stretches, suspicious_angle_thresh
     # Fallback to user-provided wind
     return current_wind
 
+
 def estimate_wind_direction(stretches, use_simple_method=True, user_wind_direction=None):
     """
     Estimate wind direction based on sailing patterns.
@@ -253,16 +125,24 @@ def estimate_wind_direction(stretches, use_simple_method=True, user_wind_directi
     Returns:
     - Estimated wind direction in degrees, or None if estimation fails
     """
-    from core.wind.algorithms import estimate_wind_direction_iterative
-    
     # Use the fixed iterative algorithm if we have a user wind direction
     if user_wind_direction is not None:
-        return estimate_wind_direction_iterative(
+        result = estimate_wind_direction_iterative(
             stretches,
             user_wind_direction,
             max_iterations=5
-        ).direction
+        )
+        return result.direction
     
     # Fallback for cases without user input
     logger.warning("No user wind direction provided for estimation")
     return None
+
+
+# Maintain backward compatibility
+__all__ = [
+    'find_consistent_angle_stretches',
+    'analyze_wind_angles',
+    'estimate_wind_direction_from_upwind_tacks',
+    'estimate_wind_direction'
+]

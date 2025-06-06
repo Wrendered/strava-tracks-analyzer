@@ -76,42 +76,51 @@ def display_track_map(
         ).add_to(m)
         
         # Add colored segments based on wind angles if available
-        if not stretches.empty and 'sailing_type' in stretches.columns:
-            # Define colors for different sailing types
-            colors = {
-                'Upwind Port': 'blue',
-                'Upwind Starboard': 'purple',
-                'Downwind Port': 'orange',
-                'Downwind Starboard': 'red'
-            }
+        
+        if not stretches.empty:
+            # Try to create sailing_type if it doesn't exist but we have the components
+            if 'sailing_type' not in stretches.columns and 'direction' in stretches.columns and 'tack' in stretches.columns:
+                stretches = stretches.copy()
+                stretches['sailing_type'] = stretches['direction'] + ' ' + stretches['tack']
             
-            # Group segments by sailing type
-            for sailing_type, color in colors.items():
-                type_segments = stretches[stretches['sailing_type'] == sailing_type]
+            if 'sailing_type' in stretches.columns:
+                # Define colors for different sailing types
+                colors = {
+                    'Upwind Port': 'blue',
+                    'Upwind Starboard': 'purple',
+                    'Downwind Port': 'orange',
+                    'Downwind Starboard': 'red'
+                }
                 
-                # Add each segment as a colored line
-                for _, segment in type_segments.iterrows():
-                    start_idx = int(segment['start_idx'])
-                    end_idx = int(segment['end_idx'])
-                    segment_points = gpx_data.iloc[start_idx:end_idx+1][['latitude', 'longitude']].values.tolist()
+                # Group segments by sailing type
+                for sailing_type, color in colors.items():
+                    type_segments = stretches[stretches['sailing_type'] == sailing_type]
                     
-                    # Add the segment line
-                    if len(segment_points) >= 2:
-                        # Create more informative tooltip that emphasizes angle off wind
-                        tooltip_text = (
-                            f"{sailing_type}<br>"
-                            f"<b>Angle off wind:</b> {segment['angle_to_wind']:.1f}°<br>"
-                            f"<b>Speed:</b> {segment['speed']:.1f} knots<br>"
-                            f"<small>Heading: {segment['bearing']:.1f}°</small>"
-                        )
+                    # Add each segment as a colored line
+                    for _, segment in type_segments.iterrows():
+                        if 'start_idx' not in segment or 'end_idx' not in segment:
+                            continue
+                        start_idx = int(segment['start_idx'])
+                        end_idx = int(segment['end_idx'])
+                        segment_points = gpx_data.iloc[start_idx:end_idx+1][['latitude', 'longitude']].values.tolist()
                         
-                        folium.PolyLine(
-                            segment_points,
-                            color=color,
-                            weight=4,
-                            opacity=0.8,
-                            tooltip=tooltip_text
-                        ).add_to(m)
+                        # Add the segment line
+                        if len(segment_points) >= 2:
+                            # Create more informative tooltip that emphasizes angle off wind
+                            tooltip_text = (
+                                f"{sailing_type}<br>"
+                                f"<b>Angle off wind:</b> {segment['angle_to_wind']:.1f}°<br>"
+                                f"<b>Speed:</b> {segment['avg_speed_knots']:.1f} knots<br>"
+                                f"<small>Heading: {segment['bearing']:.1f}°</small>"
+                            )
+                            
+                            folium.PolyLine(
+                                segment_points,
+                                color=color,
+                                weight=4,
+                                opacity=0.8,
+                                tooltip=tooltip_text
+                            ).add_to(m)
         
         # Add wind direction arrow
         if wind_direction is not None:
@@ -177,17 +186,17 @@ def plot_polar_diagram(stretches: pd.DataFrame, wind_direction: float) -> Figure
     
     # Prepare plotting data for port and starboard, placing them on opposite sides
     port_angles_rad = np.radians(stretches.loc[port_mask, 'angle_to_wind'].values)
-    port_speeds = stretches.loc[port_mask, 'speed'].values
+    port_speeds = stretches.loc[port_mask, 'avg_speed_knots'].values
     
     starboard_angles_rad = np.radians(stretches.loc[starboard_mask, 'angle_to_wind'].values)
-    starboard_speeds = stretches.loc[starboard_mask, 'speed'].values
+    starboard_speeds = stretches.loc[starboard_mask, 'avg_speed_knots'].values
     
     # Set plot parameters
     ax.set_theta_zero_location("N")  # 0 is at the top
     ax.set_theta_direction(-1)      # Clockwise
     
     # Set fixed max speed for consistent scale
-    max_speed = max(stretches['speed'].max() if not stretches.empty else 20, 20)
+    max_speed = max(stretches['avg_speed_knots'].max() if not stretches.empty else 20, 20)
     
     # Plot segments as points with different colors for port and starboard
     port_colors = []

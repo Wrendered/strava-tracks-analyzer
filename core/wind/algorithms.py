@@ -23,7 +23,7 @@ from core.constants import (
 )
 from core.wind.models import WindEstimate
 from core.metrics_advanced import detect_suspicious_segments, calculate_segment_quality_score
-from utils.analysis import analyze_wind_angles
+from core.calculations import analyze_wind_angles
 
 logger = logging.getLogger(__name__)
 

@@ -88,12 +88,16 @@ def recalculate_segments(params_changed=None):
         if not base_stretches.empty:
             logger.info(f"Filtering {len(base_stretches)} stretches by min_speed: {min_speed} knots")
             
-            # Filter by speed in knots directly - stretches['speed'] is already in knots
-            base_stretches = base_stretches[base_stretches['speed'] >= min_speed]
+            # Filter by speed in knots directly - stretches['avg_speed_knots'] is already in knots
+            base_stretches = base_stretches[base_stretches['avg_speed_knots'] >= min_speed]
             logger.info(f"After filtering: {len(base_stretches)} stretches remain")
             
             # Analyze with current wind direction
             recalculated = analyze_wind_angles(base_stretches, wind_direction)
+            
+            # Add sailing_type column for visualization
+            if 'direction' in recalculated.columns and 'tack' in recalculated.columns:
+                recalculated['sailing_type'] = recalculated['direction'] + ' ' + recalculated['tack']
             
             # Update session state
             st.session_state.track_stretches = recalculated
@@ -166,6 +170,11 @@ def update_wind_direction(new_wind_direction, recalculate_stretches=True):
     # Fallback: try to update existing stretches directly
     try:
         recalculated = analyze_wind_angles(st.session_state.track_stretches, new_wind_direction)
+        
+        # Add sailing_type column for visualization
+        if 'direction' in recalculated.columns and 'tack' in recalculated.columns:
+            recalculated['sailing_type'] = recalculated['direction'] + ' ' + recalculated['tack']
+        
         st.session_state.track_stretches = recalculated
         logger.info(f"Updated existing stretches with wind direction {new_wind_direction}°")
         return True
@@ -501,8 +510,8 @@ def display_page():
                 if not stretches.empty:
                     logger.info(f"Filtering {len(stretches)} stretches by min_speed: {min_speed} knots")
                     
-                    # Filter by speed in knots directly - stretches['speed'] is already in knots
-                    stretches = stretches[stretches['speed'] >= min_speed]
+                    # Filter by speed in knots directly - stretches['avg_speed_knots'] is already in knots
+                    stretches = stretches[stretches['avg_speed_knots'] >= min_speed]
                     logger.info(f"After filtering: {len(stretches)} stretches remain")
                     
                 # Store in session state if not empty
@@ -664,6 +673,10 @@ def display_page():
         
         # Continue with the rest of the analysis if we have stretches
         if stretches is not None and not stretches.empty:
+            # Add sailing_type column to stretches if it doesn't exist
+            if 'sailing_type' not in stretches.columns and 'direction' in stretches.columns and 'tack' in stretches.columns:
+                stretches['sailing_type'] = stretches['direction'] + ' ' + stretches['tack']
+            
             # Process stretches for display
             display_df = stretches.copy()
             display_df['original_index'] = display_df.index
@@ -687,7 +700,7 @@ def display_page():
                 'bearing': 'heading (°)',
                 'angle_to_wind': 'angle off wind (°)',
                 'distance': 'distance (m)',
-                'speed': 'speed (knots)',
+                'avg_speed_knots': 'speed (knots)',
                 'duration': 'duration (sec)'
             })
             
@@ -743,14 +756,14 @@ def display_page():
                                 if not port_upwind.empty and len(port_upwind) > 0:
                                     best_port = port_upwind.loc[port_upwind['angle_to_wind'].idxmin()]
                                     st.metric("Best Port Angle", f"{best_port['angle_to_wind']:.1f}°", 
-                                            f"{best_port['speed']:.1f} knots")
+                                            f"{best_port['avg_speed_knots']:.1f} knots")
                                     st.caption(f"Bearing: {best_port['bearing']:.0f}°")
                                 
                                 # Find best starboard tack upwind angle - just use minimum angle
                                 if not starboard_upwind.empty and len(starboard_upwind) > 0:
                                     best_starboard = starboard_upwind.loc[starboard_upwind['angle_to_wind'].idxmin()]
                                     st.metric("Best Starboard Angle", f"{best_starboard['angle_to_wind']:.1f}°", 
-                                            f"{best_starboard['speed']:.1f} knots")
+                                            f"{best_starboard['avg_speed_knots']:.1f} knots")
                                     st.caption(f"Bearing: {best_starboard['bearing']:.0f}°")
                                 
                                 # Calculate VMG upwind using enhanced distance-weighted algorithm
@@ -774,7 +787,7 @@ def display_page():
                                     pointing_power = (best_port['angle_to_wind'] + best_starboard['angle_to_wind']) / 2
                                     
                                     # Average speed
-                                    avg_upwind_speed = (best_port['speed'] + best_starboard['speed']) / 2
+                                    avg_upwind_speed = (best_port['avg_speed_knots'] + best_starboard['avg_speed_knots']) / 2
                                     
                                     # Calculate upwind progress speed
                                     upwind_vmg = avg_upwind_speed * math.cos(math.radians(pointing_power))
@@ -815,14 +828,14 @@ def display_page():
                                     # For downwind, we want the largest angle from wind
                                     best_port = port_downwind.loc[port_downwind['angle_to_wind'].idxmax()]
                                     st.metric("Best Port Angle", f"{best_port['angle_to_wind']:.1f}°",
-                                            f"{best_port['speed']:.1f} knots")
+                                            f"{best_port['avg_speed_knots']:.1f} knots")
                                     st.caption(f"Bearing: {best_port['bearing']:.0f}°")
                                 
                                 # Find best starboard tack downwind angle
                                 if not starboard_downwind.empty:
                                     best_starboard = starboard_downwind.loc[starboard_downwind['angle_to_wind'].idxmax()]
                                     st.metric("Best Starboard Angle", f"{best_starboard['angle_to_wind']:.1f}°",
-                                            f"{best_starboard['speed']:.1f} knots")
+                                            f"{best_starboard['avg_speed_knots']:.1f} knots")
                                     st.caption(f"Bearing: {best_starboard['bearing']:.0f}°")
                             else:
                                 st.info("No downwind data")
@@ -839,6 +852,11 @@ def display_page():
                 else:
                     filtered_stretches = stretches
                     source_note = f"(using all {len(stretches)} segments)"
+                
+                # Ensure sailing_type column exists
+                if 'sailing_type' not in filtered_stretches.columns and 'direction' in filtered_stretches.columns and 'tack' in filtered_stretches.columns:
+                    filtered_stretches = filtered_stretches.copy()
+                    filtered_stretches['sailing_type'] = filtered_stretches['direction'] + ' ' + filtered_stretches['tack']
                 
                 if len(filtered_stretches) > 2:
                     fig = plot_polar_diagram(filtered_stretches, wind_direction)

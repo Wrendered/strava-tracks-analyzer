@@ -2,28 +2,52 @@
 Segments package.
 
 This package contains functionality for segment detection, analysis, and filtering.
+Now with clean, modular structure and no circular dependencies.
 """
 
-# Import from analyzer module
-from core.segments.analyzer import SegmentAnalyzer, SegmentFilterCriteria
+# Import from the new modular detector
+from .detector import (
+    find_consistent_angle_stretches,
+    calculate_point_metrics,
+    detect_angle_changes,
+    build_segments,
+    filter_valid_segments,
+    analyze_segment_distribution
+)
 
-# Import the original segments.py module functions to maintain backward compatibility
-import sys
-import importlib.util
-import os
+# Import from analyzer (if it exists)
+try:
+    from .analyzer import SegmentAnalyzer, SegmentFilterCriteria
+except ImportError:
+    # analyzer module doesn't exist yet
+    pass
 
-# Get the absolute path to segments.py using the package's directory
-package_dir = os.path.dirname(__file__)
-segments_path = os.path.join(os.path.dirname(package_dir), 'segments.py')
+# Import wind analysis function from calculations (no circular dependency!)
+from core.calculations import analyze_wind_angles
 
-# Load the segments.py module
-spec = importlib.util.spec_from_file_location('core.segments_module', segments_path)
-segments_module = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(segments_module)
+# Import segment models
+from core.models.segment import Segment, segments_to_dataframe, dataframe_to_segments
 
-# Re-export the functions from segments.py
-find_consistent_angle_stretches = segments_module.find_consistent_angle_stretches
-analyze_wind_angles = segments_module.analyze_wind_angles
-
-# Clean up
-del sys, importlib, os, package_dir, segments_path, spec, segments_module
+__all__ = [
+    # Main detection function (backward compatible)
+    'find_consistent_angle_stretches',
+    
+    # Modular detection functions
+    'calculate_point_metrics',
+    'detect_angle_changes', 
+    'build_segments',
+    'filter_valid_segments',
+    'analyze_segment_distribution',
+    
+    # Wind analysis
+    'analyze_wind_angles',
+    
+    # Models
+    'Segment',
+    'segments_to_dataframe',
+    'dataframe_to_segments',
+    
+    # Analyzer (if available)
+    'SegmentAnalyzer',
+    'SegmentFilterCriteria'
+]

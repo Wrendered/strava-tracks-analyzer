@@ -90,7 +90,7 @@ class GearItem:
                         best_port = port_upwind.loc[port_upwind['angle_to_wind'].idxmin()]
                         best_port_upwind = {
                             "angle": best_port['angle_to_wind'],
-                            "speed": best_port['speed']  # Speed is already in knots in the UI
+                            "speed": best_port['avg_speed_knots']  # Speed is already in knots in the UI
                         }
                     
                     # Find best starboard tack upwind angle
@@ -98,7 +98,7 @@ class GearItem:
                         best_starboard = starboard_upwind.loc[starboard_upwind['angle_to_wind'].idxmin()]
                         best_starboard_upwind = {
                             "angle": best_starboard['angle_to_wind'],
-                            "speed": best_starboard['speed']  # Speed is already in knots in the UI
+                            "speed": best_starboard['avg_speed_knots']  # Speed is already in knots in the UI
                         }
                     
                     # Calculate improved VMG upwind using advanced algorithm
@@ -143,7 +143,7 @@ class GearItem:
                         best_port = port_downwind.loc[port_downwind['angle_to_wind'].idxmax()]
                         best_port_downwind = {
                             "angle": best_port['angle_to_wind'],
-                            "speed": best_port['speed']  # Speed is already in knots in the UI
+                            "speed": best_port['avg_speed_knots']  # Speed is already in knots in the UI
                         }
                     
                     # Find best starboard tack downwind angle
@@ -151,7 +151,7 @@ class GearItem:
                         best_starboard = starboard_downwind.loc[starboard_downwind['angle_to_wind'].idxmax()]
                         best_starboard_downwind = {
                             "angle": best_starboard['angle_to_wind'],
-                            "speed": best_starboard['speed']  # Speed is already in knots in the UI
+                            "speed": best_starboard['avg_speed_knots']  # Speed is already in knots in the UI
                         }
         
         # Get average angles if available in session state

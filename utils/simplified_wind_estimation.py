@@ -205,7 +205,7 @@ def detect_and_remove_outliers(stretches, wind_direction, suspicious_angle_thres
         wind_direction = float(wind_direction) % FULL_CIRCLE_DEGREES
         
         # Ensure we have angles calculated for the current wind direction
-        from utils.analysis import analyze_wind_angles
+        from core.calculations import analyze_wind_angles
         stretches_with_angles = analyze_wind_angles(stretches.copy(), wind_direction)
         
         # Verify required columns exist
