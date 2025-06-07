@@ -61,7 +61,7 @@ class WindService:
             bool: True if update was successful, False otherwise
         """
         # Import directly from the core.segments package
-        from core.segments import analyze_wind_angles
+        from core.calculations import analyze_wind_angles
         from services.segment_service import SegmentService
         
         # Store the previous wind direction for logging

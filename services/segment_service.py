@@ -14,7 +14,8 @@ from datetime import timedelta
 
 from utils.state_manager import StateManager, SegmentStateManager, WindStateManager
 # Import the functions directly from the core.segments package (which now correctly re-exports them)
-from core.segments import find_consistent_angle_stretches, analyze_wind_angles
+from core.segments import find_consistent_angle_stretches
+from core.calculations import analyze_wind_angles
 from utils.segment_analysis import detect_suspicious_segments
 from config.settings import (
     DEFAULT_ANGLE_TOLERANCE,

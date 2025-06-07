@@ -10,7 +10,7 @@ import numpy as np
 import logging
 from typing import Dict, List, Optional, Tuple, Union
 
-from core.segments import analyze_wind_angles
+from core.calculations import analyze_wind_angles
 from core.wind.estimate import estimate_wind_direction
 from core.wind.models import WindEstimate
 
