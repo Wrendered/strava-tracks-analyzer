@@ -13,6 +13,11 @@ from typing import List, Tuple, Dict, Any, Optional
 from core.constants import FULL_CIRCLE_DEGREES, METERS_PER_SECOND_TO_KNOTS
 from core.calculations import calculate_bearing, calculate_distance
 from core.models.segment import Segment, segments_to_dataframe
+from core.validation import (
+    validate_gpx_dataframe, validate_parameter_ranges, 
+    validate_and_clean_segments, safe_dataframe_operation,
+    ValidationError
+)
 
 logger = logging.getLogger(__name__)
 
@@ -239,12 +244,25 @@ def find_consistent_angle_stretches(df: pd.DataFrame,
     Returns:
         DataFrame with detected segments
     """
-    logger.info(f"Starting segment detection with tolerance={angle_tolerance}°, " +
-                f"min_duration={min_duration_seconds}s, min_distance={min_distance_meters}m")
-    
-    # Validate input
-    if len(df) < 2:
-        logger.warning("Not enough GPS points for segment detection")
+    try:
+        # Validate inputs
+        validate_gpx_dataframe(df, "Segment detection input")
+        validate_parameter_ranges(
+            angle_tolerance=angle_tolerance,
+            min_distance=min_distance_meters,
+            min_duration=min_duration_seconds
+        )
+        
+        logger.info(f"Starting segment detection with tolerance={angle_tolerance}°, " +
+                    f"min_duration={min_duration_seconds}s, min_distance={min_distance_meters}m")
+        
+        # Check for minimum data points
+        if len(df) < 2:
+            logger.warning("Not enough GPS points for segment detection")
+            return pd.DataFrame()
+            
+    except ValidationError as e:
+        logger.error(f"Validation failed for segment detection: {e}")
         return pd.DataFrame()
     
     # Step 1: Calculate point metrics (bearing, distance, duration)
@@ -274,8 +292,11 @@ def find_consistent_angle_stretches(df: pd.DataFrame,
     # Step 5: Convert to DataFrame for backward compatibility
     result_df = segments_to_dataframe(valid_segments)
     
+    # Validate and clean the result
+    cleaned_df = validate_and_clean_segments(result_df)
+    
     logger.info(f"Successfully detected {len(valid_segments)} valid segments")
-    return result_df
+    return cleaned_df
 
 
 def analyze_segment_distribution(segments: List[Segment]) -> Dict[str, Any]:
