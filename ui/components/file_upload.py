@@ -28,25 +28,67 @@ def render_file_upload_section(
         on_file_loaded: Callback when file is successfully loaded
         on_wind_change: Callback when wind direction changes
     """
-    # Create two columns for file upload and wind direction
-    col1, col2 = st.columns([2, 1])
+    # WIND DIRECTION FIRST - Most important for accurate analysis
+    st.markdown("### 🧭 Step 1: Initial Wind Estimate")
+    st.info("📍 Enter your best guess - the algorithm will refine this automatically")
+    
+    col1, col2 = st.columns([1, 1])
+    with col1:
+        _render_wind_direction_input(on_wind_change)
+    with col2:
+        st.markdown("**0°=North, 90°=East, 180°=South, 270°=West**")
+    
+    st.markdown("### 📁 Step 2: Upload Your Track")
+    
+    # File upload and clear button
+    col1, col2 = st.columns([3, 1])
     
     with col1:
         _render_file_uploader(on_file_loaded)
     
     with col2:
-        _render_wind_direction_input(on_wind_change)
+        _render_clear_file_button()
 
 
 def _render_file_uploader(on_file_loaded: Callable[[pd.DataFrame, str], None]) -> None:
     """Render the GPX file uploader."""
+    # Show current file status if loaded
+    if 'uploaded_filename' in st.session_state and st.session_state.get('track_data') is not None:
+        st.info(f"📁 Current file: **{st.session_state.uploaded_filename}**")
+    
     uploaded_file = st.file_uploader(
         "Upload GPX File", 
         type=['gpx'], 
-        help="Upload a GPX file from Strava or other GPS tracking apps"
+        help="Upload a GPX file from Strava or other GPS tracking apps",
+        key="file_uploader"
     )
     
+    # Check if clear was requested
+    if st.session_state.get('clear_requested', False):
+        # If no file is uploaded anymore, clear completed successfully
+        if uploaded_file is None:
+            del st.session_state['clear_requested']
+            st.success("✅ Cleared! You can now upload a new file.")
+            return
+        else:
+            # Still has file, show warning
+            st.warning("⚠️ Please click the 'X' on the file upload widget above to complete clearing")
+            return
+        
     if uploaded_file is not None:
+        # Check if this file has already been processed to prevent infinite loops
+        current_file_name = uploaded_file.name
+        last_processed_file = st.session_state.get('last_processed_file')
+        
+        if current_file_name == last_processed_file:
+            # File already processed, just display the summary
+            if 'track_data' in st.session_state and 'uploaded_filename' in st.session_state:
+                track_data = st.session_state.track_data
+                filename = st.session_state.uploaded_filename
+                # Just show minimal info, no redundant summary
+                pass
+            return
+        
         try:
             # Load the GPX file
             with st.spinner("Loading GPX file..."):
@@ -72,18 +114,19 @@ def _render_file_uploader(on_file_loaded: Callable[[pd.DataFrame, str], None]) -
                     st.session_state.track_data = track_data
                     st.session_state.uploaded_filename = filename
                     
-                    # Initialize file-specific wind settings if not exists
+                    # DON'T override the user's wind direction input!
+                    # The user has already set it in Step 1 before uploading
+                    # Just store file-specific wind if needed for later
                     if f'wind_direction_{clean_filename}' not in st.session_state:
-                        st.session_state[f'wind_direction_{clean_filename}'] = DEFAULT_WIND_DIRECTION
+                        # Use current wind direction if user has set it, otherwise default
+                        current_wind = st.session_state.get('wind_direction', DEFAULT_WIND_DIRECTION)
+                        st.session_state[f'wind_direction_{clean_filename}'] = current_wind
                     
-                    # Set current wind direction from file-specific storage
-                    current_wind = st.session_state.get(f'wind_direction_{clean_filename}', DEFAULT_WIND_DIRECTION)
-                    st.session_state.wind_direction = current_wind
+                    # Minimal file loaded message
+                    st.success(f"✅ {filename}")
                     
-                    st.success(f"✅ Loaded {len(track_data)} GPS points from {filename}")
-                    
-                    # Display basic track info  
-                    _display_track_summary(track_data, filename, metadata)
+                    # Mark this file as processed to prevent infinite loops
+                    st.session_state['last_processed_file'] = current_file_name
                     
                     # Trigger callback
                     on_file_loaded(track_data, filename)
@@ -103,38 +146,37 @@ def _render_wind_direction_input(on_wind_change: Callable[[float], None]) -> Non
     """Render wind direction input controls."""
     st.subheader("Wind Direction")
     
-    # Get current wind direction
-    current_wind = st.session_state.get('wind_direction', DEFAULT_WIND_DIRECTION)
+    # Initialize wind_direction in session state if not present
+    if 'wind_direction' not in st.session_state:
+        st.session_state.wind_direction = DEFAULT_WIND_DIRECTION
     
-    # Wind direction input
+    # Wind direction input - directly update session state
     wind_direction = st.number_input(
         "Wind Direction (°)",
         min_value=0,
         max_value=359,
-        value=int(current_wind),
+        value=int(st.session_state.wind_direction),
         step=5,
-        help="Direction wind is coming FROM (0°=North, 90°=East, 180°=South, 270°=West)",
-        key="wind_direction_input"
+        help="Direction wind is coming FROM",
+        key="wind_input",
+        on_change=lambda: _handle_wind_change(on_wind_change)
     )
     
-    # Update wind direction if changed
-    if wind_direction != current_wind:
-        st.session_state.wind_direction = float(wind_direction)
-        
-        # Store file-specific wind direction if we have a file
-        if 'uploaded_filename' in st.session_state:
-            filename = st.session_state.uploaded_filename
-            clean_filename = "".join(c for c in str(filename) if c.isalnum() or c in (' ', '-', '_')).strip()
-            st.session_state[f'wind_direction_{clean_filename}'] = float(wind_direction)
-        
-        on_wind_change(float(wind_direction))
+
+def _handle_wind_change(on_wind_change: Callable[[float], None]) -> None:
+    """Handle wind direction changes from the input widget."""
+    new_wind = st.session_state.wind_input
+    st.session_state.wind_direction = float(new_wind)
     
-    # Wind direction reference
-    st.markdown("""
-    <div style="font-size: 12px; color: var(--text-color, #666); margin-top: 5px;">
-        <strong>Reference:</strong> 0°=N, 90°=E, 180°=S, 270°=W
-    </div>
-    """, unsafe_allow_html=True)
+    # Store file-specific wind direction if we have a file
+    if 'uploaded_filename' in st.session_state:
+        filename = st.session_state.uploaded_filename
+        clean_filename = "".join(c for c in str(filename) if c.isalnum() or c in (' ', '-', '_')).strip()
+        st.session_state[f'wind_direction_{clean_filename}'] = float(new_wind)
+    
+    on_wind_change(float(new_wind))
+    
+    # Remove redundant reference text
 
 
 def _display_track_summary(track_data: pd.DataFrame, filename: str, metadata: dict = None) -> None:
@@ -174,6 +216,25 @@ def _display_track_summary(track_data: pd.DataFrame, filename: str, metadata: di
         
     except Exception as e:
         logger.warning(f"Error displaying track summary: {e}")
+
+
+def _render_clear_file_button() -> None:
+    """Render button to clear current file."""
+    if 'track_data' in st.session_state and st.session_state.track_data is not None:
+        st.write("")  # Add some spacing
+        if st.button("🗑️ Clear", help="Clear current file to upload a new one"):
+            # Clear all related session state
+            keys_to_clear = [
+                'track_data', 'uploaded_filename', 'track_stretches',
+                'last_processed_file', 'refined_wind_direction', 'wind_confidence'
+            ]
+            for key in keys_to_clear:
+                if key in st.session_state:
+                    del st.session_state[key]
+            
+            # IMPORTANT: Set a flag to ignore the current file
+            st.session_state['clear_requested'] = True
+            st.rerun()
 
 
 def get_current_file_info() -> Optional[Tuple[pd.DataFrame, str]]:

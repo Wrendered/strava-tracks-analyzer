@@ -60,10 +60,11 @@ def calculate_segment_quality_score(segments: pd.DataFrame) -> pd.Series:
             quality_score = pd.Series(QUALITY_WEIGHT_DISTANCE, index=segments.index)
     
     # Speed factor (30%) if available
-    if 'speed' in segments.columns:
-        max_speed = segments['speed'].max()
+    speed_column = 'avg_speed_knots' if 'avg_speed_knots' in segments.columns else 'speed'
+    if speed_column in segments.columns:
+        max_speed = segments[speed_column].max()
         if max_speed > 0:
-            normalized_speed = segments['speed'] / max_speed
+            normalized_speed = segments[speed_column] / max_speed
             # Speed contributes to quality score based on weight
             quality_score += QUALITY_WEIGHT_SPEED * normalized_speed
     
@@ -150,8 +151,11 @@ def calculate_vmg_upwind(
             if not angle_filtered.empty:
                 # Step 4: Calculate VMG for each segment
                 angle_filtered = angle_filtered.copy()  # Make a copy to avoid SettingWithCopyWarning
+                
+                # Use the correct column name for speed
+                speed_column = 'avg_speed_knots' if 'avg_speed_knots' in angle_filtered.columns else 'speed'
                 angle_filtered['vmg'] = angle_filtered.apply(
-                    lambda row: row['speed'] * math.cos(math.radians(row['angle_to_wind'])), axis=1
+                    lambda row: row[speed_column] * math.cos(math.radians(row['angle_to_wind'])), axis=1
                 )
                 
                 # Log individual VMGs for debugging
@@ -229,8 +233,11 @@ def calculate_vmg_downwind(
             if not angle_filtered.empty:
                 # Step 4: Calculate VMG for each segment
                 angle_filtered = angle_filtered.copy()  # Make a copy to avoid SettingWithCopyWarning
+                
+                # Use the correct column name for speed
+                speed_column = 'avg_speed_knots' if 'avg_speed_knots' in angle_filtered.columns else 'speed'
                 angle_filtered['vmg'] = angle_filtered.apply(
-                    lambda row: row['speed'] * math.cos(math.radians(ANGLE_WRAP_BOUNDARY_DEGREES - row['angle_to_wind'])), axis=1
+                    lambda row: row[speed_column] * math.cos(math.radians(ANGLE_WRAP_BOUNDARY_DEGREES - row['angle_to_wind'])), axis=1
                 )
                 
                 # Step 5: Weight by distance

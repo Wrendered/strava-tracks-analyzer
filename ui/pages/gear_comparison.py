@@ -11,10 +11,135 @@ import matplotlib.pyplot as plt
 import logging
 from typing import Dict, List, Optional, Any, Tuple
 import math
+import uuid
 
 from core.models.gear_item import GearItem
+from services.track_analysis_service import analyze_track_file, create_gear_item_from_analysis, get_analysis_parameters_from_session
 
 logger = logging.getLogger(__name__)
+
+
+def _render_bulk_upload_section():
+    """Render bulk upload section for gear comparison."""
+    with st.expander("📦 Bulk Upload Files for Comparison", expanded=False):
+        st.markdown("""
+        Upload multiple GPX files at once. Each file will be analyzed automatically with wind direction estimation.
+        """)
+        
+        # Wind direction input for bulk upload
+        col1, col2 = st.columns([1, 2])
+        with col1:
+            initial_wind = st.number_input(
+                "Initial Wind Estimate (°)",
+                min_value=0,
+                max_value=359,
+                value=90,
+                step=5,
+                help="Starting point for wind estimation. Algorithm will refine for each file.",
+                key="bulk_wind_direction"
+            )
+        
+        with col2:
+            st.info("💡 The algorithm will automatically refine the wind direction for each file based on sailing patterns")
+        
+        # File uploader
+        bulk_files = st.file_uploader(
+            "Select GPX files",
+            type=['gpx'],
+            accept_multiple_files=True,
+            help="Select multiple GPX files to analyze and compare",
+            key="bulk_upload_comparison"
+        )
+        
+        if bulk_files:
+            if st.button(f"🚀 Process {len(bulk_files)} files", key="process_bulk_comparison"):
+                _process_bulk_files(bulk_files, initial_wind)
+
+
+def _process_bulk_files(files, initial_wind_direction):
+    """Process multiple GPX files for comparison using the shared analysis service."""
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+    
+    # Get analysis parameters from session state - EXACTLY THE SAME AS MAIN PAGE
+    analysis_params = get_analysis_parameters_from_session(st.session_state)
+    
+    successful = []
+    failed = []
+    
+    for idx, file in enumerate(files):
+        try:
+            status_text.text(f"Processing {file.name}...")
+            
+            # Use the EXACT SAME analysis pipeline as the main page
+            analysis_result = analyze_track_file(
+                file=file,
+                initial_wind_direction=initial_wind_direction,
+                **analysis_params  # Use exact same parameters as main page
+            )
+            
+            if not analysis_result.segments.empty:
+                # Create gear item using the shared service
+                gear_name = file.name.replace('.gpx', '')
+                gear_item = create_gear_item_from_analysis(analysis_result, gear_name)
+                
+                # Add to session state
+                if 'gear_items' not in st.session_state:
+                    st.session_state.gear_items = {}
+                
+                st.session_state.gear_items[gear_name] = gear_item
+                
+                successful.append({
+                    'file': file.name,
+                    'segments': len(analysis_result.segments),
+                    'upwind_segments': len(analysis_result.upwind_segments),
+                    'initial_wind': initial_wind_direction,
+                    'refined_wind': analysis_result.refined_wind,
+                    'wind_change': analysis_result.refined_wind - initial_wind_direction,
+                    'vmg': analysis_result.vmg_upwind,
+                    'best_port_angle': analysis_result.best_port_angle,
+                    'best_starboard_angle': analysis_result.best_starboard_angle
+                })
+            else:
+                failed.append({'file': file.name, 'reason': 'No segments detected'})
+                
+        except Exception as e:
+            logger.error(f"Error processing {file.name}: {e}")
+            failed.append({'file': file.name, 'reason': str(e)})
+        
+        # Update progress
+        progress_bar.progress((idx + 1) / len(files))
+    
+    # Clear progress indicators
+    progress_bar.empty()
+    status_text.empty()
+    
+    # Show results
+    if successful:
+        st.success(f"✅ Successfully processed {len(successful)} files")
+        
+        # Show detailed processing results
+        st.markdown("**Processing Details:**")
+        for result in successful:
+            st.write(f"**{result['file']}**:")
+            st.write(f"  • Wind: {result['initial_wind']}° → {result['refined_wind']:.1f}° "
+                    f"(Δ{result['wind_change']:+.1f}°)")
+            st.write(f"  • Segments: {result['segments']} total, {result['upwind_segments']} upwind")
+            st.write(f"  • VMG: {result['vmg']:.1f}kn" if result['vmg'] else "  • VMG: N/A")
+            if result['best_port_angle'] and result['best_starboard_angle']:
+                st.write(f"  • Best angles: Port {result['best_port_angle']:.1f}°, Starboard {result['best_starboard_angle']:.1f}°")
+            st.write("")
+    
+    if failed:
+        st.warning(f"⚠️ Failed to process {len(failed)} files")
+        st.markdown("**Failed Files:**")
+        for fail in failed:
+            st.error(f"• {fail['file']}: {fail['reason']}")
+    
+    # Refresh the page to show new items
+    if successful:
+        st.rerun()
+
 
 # No need for the radar chart function anymore
 
@@ -36,18 +161,20 @@ def display_page():
     # Get the gear items
     gear_items = st.session_state.gear_items
     
+    # Add bulk upload section first
+    _render_bulk_upload_section()
+    
     # Check if we have any gear items
     if not gear_items:
-        st.info("No gear items to compare yet. Export some data from the Track Analysis page.")
+        st.info("No gear items to compare yet. Use bulk upload above or export from Track Analysis page.")
         
         # Add some more detailed instructions
         st.markdown("""
         <div style="padding: 20px; background-color: var(--secondary-background-color, #f8f9fa); color: var(--text-color, #262730); border-radius: 8px; margin-top: 20px;">
-            <h3>How to Add Gear to Compare:</h3>
+            <h3>Two Ways to Add Gear:</h3>
             <ol>
-                <li>Go to the <strong>Track Analysis</strong> tab</li>
-                <li>Upload and analyze a GPX track</li>
-                <li>Click the <strong>Export to Comparison</strong> button</li>
+                <li><strong>Bulk Upload</strong>: Use the uploader above to process multiple files at once</li>
+                <li><strong>Individual Analysis</strong>: Go to Track Analysis tab → Upload GPX → Click Export to Comparison</li>
                 <li>Give your setup a descriptive title</li>
                 <li>Return to this page to see your saved gear</li>
             </ol>
@@ -133,14 +260,15 @@ def display_page():
         # Create a summary table of key metrics
         comparison_data = []
         
-        # Define the metrics we want to compare
+        # Define the metrics we want to compare - matching main page display
         metrics = [
             ('avg_speed', 'Avg Speed (kn)'),
-            ('upwind_progress_speed', 'Upwind Progress (kn)'),
-            ('best_port_upwind_angle', 'Best Port Upwind (°)'),
-            ('best_starboard_upwind_angle', 'Best Starboard Upwind (°)'),
-            ('best_port_upwind_speed', 'Port Upwind Speed (kn)'),
-            ('best_starboard_upwind_speed', 'Starboard Upwind Speed (kn)')
+            ('wind_direction', 'Wind Dir (°)'),
+            ('vmg_upwind', 'VMG Upwind (kn)'),  # Main page metric
+            ('avg_upwind_angle', 'Avg Upwind Angle (°)'),  # Main page metric  
+            ('best_port_upwind_angle', 'Best Port (°)'),
+            ('best_starboard_upwind_angle', 'Best Starboard (°)')
+            # Removed 'upwind_progress_speed' - deprecated legacy metric
         ]
         
         # Get data for all selected items
@@ -159,6 +287,17 @@ def display_page():
                             item_data[metric_name] = f"{value:.1f}"
                     else:
                         item_data[metric_name] = "N/A"
+                
+                # Add computed "Best Upwind Angle" to match main page
+                if item.best_port_upwind_angle is not None and item.best_starboard_upwind_angle is not None:
+                    best_overall = min(item.best_port_upwind_angle, item.best_starboard_upwind_angle)
+                    item_data['Best Upwind Angle (°)'] = f"{best_overall:.1f}°"
+                elif item.best_port_upwind_angle is not None:
+                    item_data['Best Upwind Angle (°)'] = f"{item.best_port_upwind_angle:.1f}°"
+                elif item.best_starboard_upwind_angle is not None:
+                    item_data['Best Upwind Angle (°)'] = f"{item.best_starboard_upwind_angle:.1f}°"
+                else:
+                    item_data['Best Upwind Angle (°)'] = "N/A"
                         
                 comparison_data.append(item_data)
         
@@ -174,70 +313,6 @@ def display_page():
             """)
         else:
             st.info("No data available for comparison.")
-        
-        # Show detailed comparison table
-        st.markdown("### 📋 Detailed Comparison")
-        
-        # Create a detailed comparison table
-        detail_cols = st.columns(len(selected_items))
-        
-        for i, item_id in enumerate(selected_items):
-            if item_id in gear_items:
-                item = gear_items[item_id]
-                
-                with detail_cols[i]:
-                    st.markdown(f"#### {item.title}")
-                    
-                    # Create a more visual comparison with metrics
-                    with st.container(border=True):
-                        # Basic info
-                        st.markdown(f"**📅 Date:** {item.date if item.date else 'Unknown'}")
-                        st.markdown(f"**🧭 Wind:** {item.wind_direction:.1f}°" if item.wind_direction else "**🧭 Wind:** N/A")
-                        
-                        # Performance metrics
-                        st.markdown("---")
-                        st.markdown("##### Performance Metrics")
-                        
-                        # Speed metrics
-                        if item.avg_speed:
-                            st.metric("Avg Speed", f"{item.avg_speed:.1f} kn")
-                        
-                        if item.upwind_progress_speed:
-                            st.metric("Upwind Progress", f"{item.upwind_progress_speed:.1f} kn")
-                        
-                        # Angle metrics
-                        st.markdown("---")
-                        st.markdown("##### Upwind Angles")
-                        
-                        col1, col2 = st.columns(2)
-                        
-                        with col1:
-                            if item.best_port_upwind_angle:
-                                st.metric("Port", f"{item.best_port_upwind_angle:.1f}°")
-                        
-                        with col2:
-                            if item.best_starboard_upwind_angle:
-                                st.metric("Starboard", f"{item.best_starboard_upwind_angle:.1f}°")
-                        
-                        # Upwind speed metrics
-                        st.markdown("---")
-                        st.markdown("##### Upwind Speeds")
-                        
-                        col1, col2 = st.columns(2)
-                        
-                        with col1:
-                            if item.best_port_upwind_speed:
-                                st.metric("Port", f"{item.best_port_upwind_speed:.1f} kn")
-                        
-                        with col2:
-                            if item.best_starboard_upwind_speed:
-                                st.metric("Starboard", f"{item.best_starboard_upwind_speed:.1f} kn")
-                        
-                        # Tack symmetry
-                        if item.port_starboard_diff is not None:
-                            st.markdown("---")
-                            st.markdown("##### Tack Symmetry")
-                            st.metric("Port-Starboard Difference", f"{item.port_starboard_diff:.1f}°")
         
         # Download option
         st.markdown("### 💾 Export Data")

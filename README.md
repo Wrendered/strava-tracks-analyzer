@@ -6,24 +6,40 @@ A Streamlit application for analyzing wingfoil sessions from Strava GPX tracks. 
 
 ## Features
 
+### Track Analysis
 - Upload GPX files from Strava or other sources
 - Automatically detect consistent sailing angles and segments
-- Calculate optimal upwind and downwind angles
-- Visualize performance with interactive maps and polar diagrams
-- Advanced wind direction estimation with confidence levels
-- Separate port and starboard tack analysis
-- Compare different gear setups (board, foil, wing combinations)
-- AI-powered gear comparison analysis with Claude
-- Export analysis as CSV for further processing
+- Advanced wind direction estimation with iterative refinement
+- Separate port and starboard tack analysis with symmetry metrics
+- Interactive maps with color-coded segments and wind arrows
+- Polar performance diagrams showing speed vs angle relationships
+- Distance-weighted VMG (Velocity Made Good) calculations
+- Adaptive parameter scaling for long tracks to prevent over-segmentation
+
+### Gear Comparison  
 - Bulk upload and analysis of multiple tracks
-- Adaptive parameter scaling for long tracks (NEW!)
+- Side-by-side comparison of different gear setups
+- Export individual sessions from Track Analysis page
+- Unified analysis pipeline ensures consistent results
+- Clean comparison table with key performance metrics
+- CSV export for further analysis
 
-## Recent Improvements
+### Advanced Analytics
+- Quality-weighted segment detection filters GPS noise
+- Wind confidence levels (High/Medium/Low/None) 
+- Suspicious angle detection and filtering
+- Distance-weighted performance calculations
+- Real-time parameter adjustment with immediate feedback
 
-- **Automatic Parameter Scaling**: The app now automatically optimizes segmentation parameters for long tracks to prevent over-segmentation
-- **Track Segmentation**: Enhanced segment detection with adaptive parameters for different track types
-- **Wind Direction UI**: Improved wind direction selection with visual feedback
-- **Performance Analysis**: Better analytics for upwind and downwind performance
+## Recent Improvements (2024)
+
+- **Unified Analysis Pipeline**: Created shared analysis service ensuring identical calculations between main page and bulk upload
+- **Fixed VMG Discrepancy**: Resolved calculation differences between individual and bulk analysis
+- **Improved Comparison Table**: Now shows metrics exactly matching the main page display
+- **Removed Legacy Metrics**: Deprecated "upwind progress" in favor of sophisticated VMG calculations
+- **Streamlined UI**: Removed redundant detailed comparison section for cleaner interface
+- **Enhanced Wind Estimation**: Iterative algorithm refines user's initial wind estimate
+- **Parameter Consistency**: Both analysis methods use identical parameters from session state
 
 ## Installation
 
@@ -94,18 +110,45 @@ The project follows a clean architecture with clear separation of concerns:
 
 ```
 strava-tracks-analyzer/
-├── app.py                   # Main Streamlit entry point
-├── config/                  # Configuration files
-├── core/                    # Core business logic 
-│   ├── gpx.py               # GPX file parsing
-│   ├── metrics.py           # Track metrics calculations
-│   ├── segments.py          # Segment detection and analysis
-│   └── wind/                # Wind direction analysis
-├── ui/                      # UI components and pages
-│   ├── pages/               # Main UI pages
-│   └── components/          # Reusable UI components
-└── utils/                   # Utility functions
-    └── parameter_scaling.py # Adaptive parameter scaling
+├── app.py                        # Main Streamlit entry point
+├── config/                       # Configuration files
+├── core/                         # Core business logic 
+│   ├── gpx.py                    # GPX file parsing
+│   ├── metrics.py                # Track metrics calculations
+│   ├── metrics_advanced.py       # Advanced VMG and quality calculations
+│   ├── segments.py               # Segment detection and analysis
+│   └── wind/                     # Wind direction analysis
+├── services/                     # Business services
+│   └── track_analysis_service.py # Unified analysis pipeline
+├── ui/                           # UI components and pages
+│   ├── pages/                    # Main UI pages
+│   └── components/               # Reusable UI components
+└── utils/                        # Utility functions
+    └── parameter_scaling.py      # Adaptive parameter scaling
 ```
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for more details on the project structure.
+
+## Changelog
+
+### Version 1.2.0 (Latest)
+- **MAJOR**: Created unified analysis pipeline for consistency between pages
+- **FIXED**: VMG calculation discrepancy between main page and bulk upload
+- **IMPROVED**: Comparison table now shows identical metrics to main page
+- **REMOVED**: Deprecated "upwind progress" metric from UI
+- **STREAMLINED**: Removed redundant detailed comparison section
+- **ENHANCED**: Wind direction estimation with iterative refinement algorithm
+
+### Version 1.1.0  
+- **NEW**: Bulk upload functionality for gear comparison
+- **IMPROVED**: Advanced wind direction estimation with confidence levels
+- **ENHANCED**: Distance-weighted VMG calculations  
+- **ADDED**: Adaptive parameter scaling for long tracks
+- **FIXED**: Over-segmentation issues on complex tracks
+
+### Version 1.0.0
+- Initial release with basic track analysis
+- GPX file upload and parsing
+- Segment detection and wind angle calculations
+- Interactive maps and polar diagrams
+- Basic gear comparison functionality

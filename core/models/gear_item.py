@@ -77,8 +77,9 @@ class GearItem:
             # IMPORTANT: Speeds in stretches DataFrame are already in knots
             # They were converted from m/s in core/segments.py
             if not stretches.empty:
-                upwind = stretches[stretches['angle_to_wind'] < 90]
-                downwind = stretches[stretches['angle_to_wind'] >= 90]
+                # Use same method as main page and bulk upload: check 'direction' column
+                upwind = stretches[stretches.get('direction', '').str.lower() == 'upwind'] if 'direction' in stretches.columns else pd.DataFrame()
+                downwind = stretches[stretches.get('direction', '').str.lower() == 'downwind'] if 'direction' in stretches.columns else pd.DataFrame()
                 
                 # Get upwind metrics
                 if not upwind.empty:
@@ -101,25 +102,13 @@ class GearItem:
                             "speed": best_starboard['avg_speed_knots']  # Speed is already in knots in the UI
                         }
                     
-                    # Calculate improved VMG upwind using advanced algorithm
-                    import math
-                    import numpy as np
-                    
-                    # Configuration for VMG calculations
-                    min_segment_distance = 50  # Minimum segment distance in meters
-                    angle_range = 20  # Range around best angle to include
-                    
-                    # Use the advanced distance-weighted algorithm
+                    # Calculate VMG using the standard algorithm
                     if not upwind.empty:
-                        vmg_upwind = calculate_vmg_upwind(
-                            upwind,
-                            angle_range=angle_range,
-                            min_segment_distance=min_segment_distance
-                        )
+                        vmg_upwind = calculate_vmg_upwind(upwind)
                     
-                    # Fallback to original method for backward compatibility
-                    # Calculate upwind progress speed when we have both tacks
+                    # Calculate upwind progress speed (legacy field) when we have both tacks
                     if all(best_port_upwind.values()) and all(best_starboard_upwind.values()):
+                        import math
                         # Simply average the angles
                         pointing_power = (best_port_upwind["angle"] + best_starboard_upwind["angle"]) / 2
                         
@@ -128,10 +117,6 @@ class GearItem:
                         
                         # Calculate upwind progress speed (legacy field)
                         upwind_progress = avg_upwind_speed * math.cos(math.radians(pointing_power))
-                        
-                        # Use this as fallback for VMG if we couldn't calculate it above
-                        if vmg_upwind is None:
-                            vmg_upwind = upwind_progress
                 
                 # Get downwind metrics
                 if not downwind.empty:

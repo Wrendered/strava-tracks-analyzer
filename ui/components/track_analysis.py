@@ -128,8 +128,12 @@ def _render_track_visualization(track_data: pd.DataFrame, segments: pd.DataFrame
     st.subheader("🗺️ Track Visualization")
     
     try:
-        # Display the map
-        display_track_map(track_data, segments)
+        # Get wind direction from session state
+        wind_direction = st.session_state.get('wind_direction', 90.0)
+        estimated_wind = st.session_state.get('estimated_wind', None)
+        
+        # Display the map with wind direction
+        display_track_map(track_data, segments, wind_direction, estimated_wind)
         
         # Add polar diagram if we have wind analysis
         if 'angle_to_wind' in segments.columns and 'tack' in segments.columns:
@@ -143,7 +147,7 @@ def _render_track_visualization(track_data: pd.DataFrame, segments: pd.DataFrame
             ]
             
             if not valid_segments.empty:
-                fig = plot_polar_diagram(valid_segments)
+                fig = plot_polar_diagram(valid_segments, wind_direction)
                 if fig is not None:
                     st.pyplot(fig)
                 else:
@@ -164,8 +168,16 @@ def _render_wind_analysis_section(segments: pd.DataFrame) -> None:
     st.subheader("💨 Wind Analysis")
     
     try:
-        # Wind re-estimation button
-        reestimate_wind_button()
+        # Get current wind direction from session state
+        current_wind = st.session_state.get('wind_direction', 90.0)
+        
+        # Wind re-estimation button with required parameters
+        def on_wind_updated(new_wind):
+            """Callback for when wind direction is updated."""
+            from ui.pages.analysis import update_wind_direction
+            return update_wind_direction(new_wind, recalculate_stretches=True)
+        
+        reestimate_wind_button(segments, current_wind, on_success_callback=on_wind_updated)
         
         # Tack analysis
         if 'tack' in segments.columns:
@@ -218,21 +230,63 @@ def _render_detailed_analysis(segments: pd.DataFrame, filename: str) -> None:
     st.subheader("📋 Detailed Analysis")
     
     try:
-        # Segment filtering controls
-        filtered_segments = segment_selection_bar(segments)
+        # Prepare segments data with required columns for filtering
+        prepared_segments = segments.copy()
         
-        if filtered_segments is not None and not filtered_segments.empty:
-            # Display segment details table
-            segment_details_table(filtered_segments)
+        # Add original_index if it doesn't exist
+        if 'original_index' not in prepared_segments.columns:
+            prepared_segments['original_index'] = prepared_segments.index
+        
+        # Add required columns for the filters
+        if 'upwind_downwind' not in prepared_segments.columns and 'angle_to_wind' in prepared_segments.columns:
+            prepared_segments['upwind_downwind'] = prepared_segments['angle_to_wind'].apply(
+                lambda x: 'Upwind' if x < 90 else 'Downwind'
+            )
+        
+        # Add suspicious flag if it doesn't exist
+        if 'suspicious' not in prepared_segments.columns and 'angle_to_wind' in prepared_segments.columns:
+            prepared_segments['suspicious'] = prepared_segments['angle_to_wind'] < 20
+        
+        # Add segment_id for display
+        if 'segment_id' not in prepared_segments.columns:
+            prepared_segments['segment_id'] = range(1, len(prepared_segments) + 1)
+        
+        # Add display columns for the table
+        if 'heading (°)' not in prepared_segments.columns and 'bearing' in prepared_segments.columns:
+            prepared_segments['heading (°)'] = prepared_segments['bearing'].round(1)
+        
+        if 'angle off wind (°)' not in prepared_segments.columns and 'angle_to_wind' in prepared_segments.columns:
+            prepared_segments['angle off wind (°)'] = prepared_segments['angle_to_wind'].round(1)
+        
+        if 'speed (knots)' not in prepared_segments.columns:
+            if 'avg_speed_knots' in prepared_segments.columns:
+                prepared_segments['speed (knots)'] = prepared_segments['avg_speed_knots'].round(1)
+            elif 'speed' in prepared_segments.columns:
+                prepared_segments['speed (knots)'] = prepared_segments['speed'].round(1)
+        
+        if 'distance (m)' not in prepared_segments.columns and 'distance' in prepared_segments.columns:
+            prepared_segments['distance (m)'] = prepared_segments['distance'].round(0)
+        
+        if 'duration (sec)' not in prepared_segments.columns and 'duration' in prepared_segments.columns:
+            prepared_segments['duration (sec)'] = prepared_segments['duration'].round(0)
+        
+        # Simple segment table display (replacing the complex filtering system)
+        st.markdown("**Segment Summary**")
+        
+        # Create a simplified display table
+        display_columns = ['segment_id', 'sailing_type', 'heading (°)', 'angle off wind (°)', 
+                          'speed (knots)', 'distance (m)', 'duration (sec)']
+        
+        # Filter to only existing columns
+        available_columns = [col for col in display_columns if col in prepared_segments.columns]
+        
+        if available_columns:
+            st.dataframe(prepared_segments[available_columns], use_container_width=True, height=300)
             
-            # Segment selection checkboxes for further filtering
-            selected_segments = segment_selection_checkboxes(filtered_segments)
-            
-            if selected_segments is not None and not selected_segments.empty:
-                # Export to gear comparison
-                export_to_comparison_button(selected_segments, filename)
+            # Export option
+            export_to_comparison_button(prepared_segments, filename)
         else:
-            st.info("No segments match the current filter criteria")
+            st.info("No detailed segment data available for display")
             
     except Exception as e:
         logger.error(f"Error in detailed analysis: {e}")

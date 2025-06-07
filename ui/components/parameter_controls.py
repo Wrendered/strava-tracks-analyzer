@@ -142,6 +142,7 @@ def _render_wind_angle_explanation() -> None:
         </span>
     </div>
     """, unsafe_allow_html=True)
+    
 
 
 def render_manual_recalc_button() -> bool:
@@ -151,6 +152,10 @@ def render_manual_recalc_button() -> bool:
     Returns:
         bool: True if the button was clicked
     """
+    # Only show if data is loaded
+    if 'track_data' not in st.session_state or st.session_state.track_data is None:
+        return False
+        
     return st.button(
         "🔄 Recalculate All Segments", 
         help="Force recalculation of all segments with current parameters",

@@ -13,12 +13,12 @@ from core.models.gear_item import GearItem
 
 logger = logging.getLogger(__name__)
 
-def export_to_comparison_button(metrics: Dict[str, Any], stretches: pd.DataFrame) -> Optional[str]:
+def export_to_comparison_button(segments: pd.DataFrame, filename: str) -> Optional[str]:
     """Add an export to comparison button.
     
     Args:
-        metrics: Dictionary of track metrics
-        stretches: DataFrame of sailing segments
+        segments: DataFrame of sailing segments 
+        filename: Name of the source file
         
     Returns:
         Optional[str]: The ID of the exported gear item if successful, None otherwise
@@ -27,8 +27,8 @@ def export_to_comparison_button(metrics: Dict[str, Any], stretches: pd.DataFrame
     if 'gear_items' not in st.session_state:
         st.session_state.gear_items = {}
     
-    # Check if we have metrics to export
-    if not metrics:
+    # Check if we have segments to export
+    if segments is None or (hasattr(segments, 'empty') and segments.empty):
         return None
     
     # Create a container for the export UI
@@ -70,7 +70,8 @@ def export_to_comparison_button(metrics: Dict[str, Any], stretches: pd.DataFrame
                 """, unsafe_allow_html=True)
                 
                 # Get a title for the export
-                default_title = f"{st.session_state.get('track_name', 'Track')} - {metrics.get('date', 'Unknown date')}"
+                track_metrics = st.session_state.get('track_metrics', {})
+                default_title = f"{st.session_state.get('track_name', filename)} - {track_metrics.get('date', 'Unknown date')}"
                 title = st.text_input(
                     "Title for this setup", 
                     value=default_title,

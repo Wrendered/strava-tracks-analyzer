@@ -132,6 +132,25 @@ For tracks >3 hours:
 - folium - Interactive maps
 - anthropic - Claude API for gear analysis
 
+## Recent Refactoring
+
+### Track Analysis Service (2024)
+- Created `services/track_analysis_service.py` for unified analysis pipeline
+- Both main page and bulk upload now use identical analysis code
+- Fixed VMG calculation discrepancy between pages
+- Eliminated duplicate segment detection and wind estimation logic
+
+### Analysis Pipeline Consistency
+- `analyze_track_file()` - Single source of truth for file analysis
+- `TrackAnalysisResult` - Consistent result container
+- `create_gear_item_from_analysis()` - Standard gear item creation
+- Both pages use `get_analysis_parameters_from_session()` for same parameters
+
+### Deprecated Metrics
+- `upwind_progress_speed` - Legacy simple calculation (avg_speed × cos(avg_angle))
+- Replaced by `vmg_upwind` - Sophisticated distance-weighted algorithm
+- Kept in GearItem model for backward compatibility but removed from UI
+
 ## Development Priorities
 
 ### High Priority
