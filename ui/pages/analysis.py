@@ -32,7 +32,7 @@ from ui.components.wind_ui import wind_direction_selector, reestimate_wind_butto
 from ui.components.gear_export import export_to_comparison_button
 
 # Import utilities
-from utils.parameter_scaling import analyze_segmentation_quality, apply_optimized_parameters, SegmentationParams
+from utils.parameter_scaling import SegmentationParams
 
 # Import config settings
 from config.settings import (
@@ -102,31 +102,7 @@ def recalculate_segments(params_changed=None):
             # Update session state
             st.session_state.track_stretches = recalculated
             
-            # Analyze segmentation quality and optimize if needed
-            if len(recalculated) > 0:
-                # Create a simple DataFrame with tack info for quality analysis
-                tack_data = recalculated[['tack']].copy() if 'tack' in recalculated.columns else None
-                
-                # Analyze segmentation quality
-                quality_analysis = analyze_segmentation_quality(
-                    recalculated,
-                    tack_data,
-                    min_distance,
-                    min_duration,
-                    angle_tolerance
-                )
-                
-                # Store in session state for reference
-                st.session_state.segmentation_quality = quality_analysis
-                
-                # Automatically apply optimization if over-segmented (score > 0.7 or max segments per tack > 5)
-                if quality_analysis['over_segmentation_score'] > 0.7 or quality_analysis['max_segments_per_tack'] > 5:
-                    # Only auto-apply if this is a newly loaded file or parameters were manually changed
-                    auto_apply = params_changed in ['newly loaded', 'segment parameters']
-                    if auto_apply:
-                        apply_optimized_parameters(st, quality_analysis)
-                        # Re-run the calculation with new parameters
-                        return recalculate_segments("parameter optimization")
+            # Success - no need for broken quality analysis
             
             logger.info(f"Successfully recalculated {len(recalculated)} stretches")
             return True
@@ -218,101 +194,78 @@ def display_page():
         prev_min_distance = st.session_state.get('min_distance', DEFAULT_MIN_DISTANCE)
         prev_min_speed = st.session_state.get('min_speed', DEFAULT_MIN_SPEED)
         
+        # Main parameter - always visible
         angle_tolerance = st.slider("Angle Tolerance (°)", 
                                    min_value=5, max_value=30, 
                                    value=prev_angle_tolerance,
-                                   help="How much the bearing can vary within a segment",
+                                   help="How much the bearing can vary within a segment. Lower = more precise segments.",
                                    key="angle_tolerance_slider")
-        # Store in session state
         if angle_tolerance != prev_angle_tolerance:
             st.session_state.angle_tolerance = angle_tolerance
             on_param_change()
         
-        # Minimum criteria
-        min_duration = st.slider("Min Duration (sec)", 
-                                min_value=5, max_value=60, 
-                                value=prev_min_duration,
-                                key="min_duration_slider")
-        if min_duration != prev_min_duration:
-            st.session_state.min_duration = min_duration
-            on_param_change()
-        
-        min_distance = st.slider("Min Distance (m)", 
-                                min_value=10, max_value=200, 
-                                value=prev_min_distance,
-                                key="min_distance_slider")
-        if min_distance != prev_min_distance:
-            st.session_state.min_distance = min_distance
-            on_param_change()
-        
-        min_speed = st.slider("Min Speed (knots)", 
-                             min_value=5.0, max_value=20.0, 
-                             value=prev_min_speed, 
-                             step=0.5,
-                             key="min_speed_slider")
-        if min_speed != prev_min_speed:
-            st.session_state.min_speed = min_speed
-            on_param_change()
-        
-        # Add "Revert to Original" button if parameters were auto-optimized
-        if 'original_parameters' in st.session_state:
-            if st.button("↩️ Revert to Original Parameters", 
-                      help="Revert to original parameters before optimization",
-                      key="revert_params_btn"):
-                # Restore original parameters
-                st.session_state.min_distance = st.session_state.original_parameters['min_distance']
-                st.session_state.min_time = st.session_state.original_parameters['min_time']
-                st.session_state.angle_tolerance = st.session_state.original_parameters['max_angle_tolerance']
-                
-                # Clear original parameters storage
-                del st.session_state.original_parameters
-                
-                # Trigger recalculation
-                recalculate_segments("revert to original parameters")
-                st.rerun()
-        
-        # Display optimization metrics if available
-        if 'segmentation_quality' in st.session_state:
-            quality = st.session_state.segmentation_quality
+        # Advanced parameters in collapsible section
+        with st.expander("🔧 Advanced Parameters", expanded=False):
+            st.caption("Fine-tune segment detection criteria. Default values work well for most tracks.")
             
-            # Only show info if over-segmentation was detected
-            if quality['over_segmentation_score'] > 0.7 or quality['max_segments_per_tack'] > 5:
-                with st.expander("Segmentation Quality", expanded=True):
-                    st.info(f"Segments: {quality['total_segments']} (Ideal: ~{int(quality['ideal_segments'])})")
-                    st.progress(1.0 - quality['over_segmentation_score'], 
-                              text=f"Quality Score: {(1.0 - quality['over_segmentation_score']):.2f}")
-                    
-                    if quality['max_segments_per_tack'] > 5:
-                        st.warning(f"Max segments on single tack: {quality['max_segments_per_tack']}")
-        
-        st.subheader("Speed Filter")
-        prev_active_speed_threshold = st.session_state.get('active_speed_threshold', 5.0)
-        active_speed_threshold = st.slider("Active Speed Threshold (knots)", 
-                                         min_value=0.0, max_value=10.0, value=prev_active_speed_threshold, step=0.5,
-                                         help="Speeds below this will be excluded from average speed calculation",
-                                         key="active_speed_threshold_slider")
-        if active_speed_threshold != prev_active_speed_threshold:
-            st.session_state.active_speed_threshold = active_speed_threshold
-            # This one doesn't need to trigger a full segment recalculation, only metrics
+            min_duration = st.slider("Min Duration (sec)", 
+                                    min_value=5, max_value=60, 
+                                    value=prev_min_duration,
+                                    help="Minimum time a segment must last to be included",
+                                    key="min_duration_slider")
+            if min_duration != prev_min_duration:
+                st.session_state.min_duration = min_duration
+                on_param_change()
+            
+            min_distance = st.slider("Min Distance (m)", 
+                                    min_value=10, max_value=200, 
+                                    value=prev_min_distance,
+                                    help="Minimum distance a segment must cover to be included",
+                                    key="min_distance_slider")
+            if min_distance != prev_min_distance:
+                st.session_state.min_distance = min_distance
+                on_param_change()
+            
+            min_speed = st.slider("Min Speed (knots)", 
+                                 min_value=5.0, max_value=20.0, 
+                                 value=prev_min_speed, 
+                                 step=0.5,
+                                 help="Minimum average speed for segments to be included in analysis",
+                                 key="min_speed_slider")
+            if min_speed != prev_min_speed:
+                st.session_state.min_speed = min_speed
+                on_param_change()
+            
+            st.markdown("---")
+            st.caption("**Speed Filtering & Wind Analysis**")
+            
+            prev_active_speed_threshold = st.session_state.get('active_speed_threshold', 5.0)
+            active_speed_threshold = st.slider("Active Speed Threshold (knots)", 
+                                             min_value=0.0, max_value=10.0, value=prev_active_speed_threshold, step=0.5,
+                                             help="Speeds below this will be excluded from average speed calculation",
+                                             key="active_speed_threshold_slider")
+            if active_speed_threshold != prev_active_speed_threshold:
+                st.session_state.active_speed_threshold = active_speed_threshold
+                # This one doesn't need to trigger a full segment recalculation, only metrics
+
+            # Technical parameter - but important for accurate analysis
+            # Default to 20 degrees - below this is usually not physically possible
+            prev_suspicious_angle_threshold = st.session_state.get('suspicious_angle_threshold', DEFAULT_SUSPICIOUS_ANGLE_THRESHOLD)
+            suspicious_angle_threshold = st.slider(
+                "Minimum Sailing Angle (°)", 
+                min_value=15, 
+                max_value=35, 
+                value=prev_suspicious_angle_threshold,
+                help="Angles closer to wind than this are considered physically impossible and excluded from wind direction estimation",
+                key="suspicious_angle_threshold_slider"
+            )
+            
+            # Update the threshold in session state and trigger recalculation if changed
+            if suspicious_angle_threshold != prev_suspicious_angle_threshold:
+                st.session_state.suspicious_angle_threshold = suspicious_angle_threshold
+                on_param_change()
 
         min_speed_ms = min_speed * 0.514444  # Convert knots to m/s
-        
-        # Technical parameter - but important for accurate analysis
-        # Default to 20 degrees - below this is usually not physically possible
-        prev_suspicious_angle_threshold = st.session_state.get('suspicious_angle_threshold', DEFAULT_SUSPICIOUS_ANGLE_THRESHOLD)
-        suspicious_angle_threshold = st.slider(
-            "Minimum Sailing Angle (°)", 
-            min_value=15, 
-            max_value=35, 
-            value=prev_suspicious_angle_threshold,
-            help="Angles closer to wind than this are considered physically impossible and excluded from wind direction estimation (20° recommended)",
-            key="suspicious_angle_threshold_slider"
-        )
-        
-        # Update the threshold in session state and trigger recalculation if changed
-        if suspicious_angle_threshold != prev_suspicious_angle_threshold:
-            st.session_state.suspicious_angle_threshold = suspicious_angle_threshold
-            on_param_change()
             
         # Add a button to manually recalculate all segments if needed
         if st.button("🔄 Recalculate All Segments", 

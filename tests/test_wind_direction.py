@@ -16,7 +16,7 @@ import logging
 import matplotlib.pyplot as plt
 from utils.gpx_parser import load_gpx_from_path
 from utils.analysis import find_consistent_angle_stretches, analyze_wind_angles, estimate_wind_direction
-from utils.simplified_wind_estimation import iterative_wind_estimation
+from core.wind.algorithms import estimate_wind_direction_iterative
 
 # Configure logging
 logging.basicConfig(
@@ -123,7 +123,8 @@ def verify_algorithm(file_path, initial_wind_direction=None):
     
     # Run the improved algorithm
     logger.info("\n=== Running Improved Algorithm ===")
-    improved_wind = iterative_wind_estimation(stretches_with_angles.copy(), initial_wind_direction)
+    improved_result = estimate_wind_direction_iterative(stretches_with_angles.copy(), initial_wind_direction)
+    improved_wind = improved_result.direction
     
     # Analyze results
     logger.info("\n=== RESULTS COMPARISON ===")
