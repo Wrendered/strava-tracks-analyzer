@@ -241,14 +241,11 @@ def _display_simple_analysis(track_data: pd.DataFrame, segments: pd.DataFrame, f
     st.subheader("📊 Performance Analysis")
     _display_performance_stats(segments)
     
-    # Restore polar diagram 
-    _display_polar_diagram(track_data, segments)
-    
-    # VMG explanation - show when info button is clicked or in expander
+    # VMG explanation - show RIGHT AFTER performance stats when info button is clicked
     if st.session_state.get('show_vmg_details', False):
         # Show directly when info button is clicked
+        st.info("💡 **VMG Calculation Details** (click 'Close' or the ℹ️ button again to hide)")
         with st.container():
-            st.markdown("### ℹ️ How VMG is calculated")
             st.markdown("""
             **VMG (Velocity Made Good) = Speed × cos(angle to wind)**
             
@@ -287,6 +284,9 @@ def _display_simple_analysis(track_data: pd.DataFrame, segments: pd.DataFrame, f
             
             This gives a realistic VMG based on your sustained upwind performance, not just brief moments.
             """)
+    
+    # Restore polar diagram AFTER VMG explanation
+    _display_polar_diagram(track_data, segments)
     
     # Export button after VMG explanation
     if not segments.empty:
@@ -448,7 +448,10 @@ def _display_performance_stats(segments: pd.DataFrame):
                 with info_col:
                     # Clickable info button that toggles the calculation details
                     if st.button("ℹ️", key="vmg_info_button", help="Click to see how VMG is calculated"):
-                        st.session_state.show_vmg_details = not st.session_state.get('show_vmg_details', False)
+                        if 'show_vmg_details' not in st.session_state:
+                            st.session_state.show_vmg_details = True
+                        else:
+                            st.session_state.show_vmg_details = not st.session_state.show_vmg_details
             else:
                 st.metric("Upwind VMG", "N/A")
         
