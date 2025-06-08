@@ -244,24 +244,49 @@ def _display_simple_analysis(track_data: pd.DataFrame, segments: pd.DataFrame, f
     # Restore polar diagram 
     _display_polar_diagram(track_data, segments)
     
-    # VMG explanation
-    with st.expander("ℹ️ How VMG is calculated"):
-        st.markdown("""
-        **VMG (Velocity Made Good) = Speed × cos(angle to wind)**
-        
-        **Calculation Process:**
-        1. **Find best angle**: Combines segment quality (distance, speed) with closeness to wind
-        2. **Select segments**: Only includes segments within 20° of the best angle
-        3. **Calculate VMG**: For each selected segment: Speed × cos(angle)
-        4. **Distance-weighted average**: Longer segments count more in the final VMG
-        
-        **Example:**
-        - Best angle found: 42° (quality-weighted)
-        - Includes segments: 25°-62° (within 20° range)
-        - Weights by distance: 1000m segment counts 10× more than 100m segment
-        
-        This gives a realistic VMG based on your sustained upwind performance, not just brief moments.
-        """)
+    # VMG explanation - show when info button is clicked or in expander
+    if st.session_state.get('show_vmg_details', False):
+        # Show directly when info button is clicked
+        with st.container():
+            st.markdown("### ℹ️ How VMG is calculated")
+            st.markdown("""
+            **VMG (Velocity Made Good) = Speed × cos(angle to wind)**
+            
+            **Calculation Process:**
+            1. **Find best angle**: Combines segment quality (distance, speed) with closeness to wind
+            2. **Select segments**: Only includes segments within 20° of the best angle
+            3. **Calculate VMG**: For each selected segment: Speed × cos(angle)
+            4. **Distance-weighted average**: Longer segments count more in the final VMG
+            
+            **Example:**
+            - Best angle found: 42° (quality-weighted)
+            - Includes segments: 25°-62° (within 20° range)
+            - Weights by distance: 1000m segment counts 10× more than 100m segment
+            
+            This gives a realistic VMG based on your sustained upwind performance, not just brief moments.
+            """)
+            if st.button("Close", key="close_vmg_details"):
+                st.session_state.show_vmg_details = False
+                st.rerun()
+    else:
+        # Also keep the expander for users who prefer that
+        with st.expander("ℹ️ How VMG is calculated"):
+            st.markdown("""
+            **VMG (Velocity Made Good) = Speed × cos(angle to wind)**
+            
+            **Calculation Process:**
+            1. **Find best angle**: Combines segment quality (distance, speed) with closeness to wind
+            2. **Select segments**: Only includes segments within 20° of the best angle
+            3. **Calculate VMG**: For each selected segment: Speed × cos(angle)
+            4. **Distance-weighted average**: Longer segments count more in the final VMG
+            
+            **Example:**
+            - Best angle found: 42° (quality-weighted)
+            - Includes segments: 25°-62° (within 20° range)
+            - Weights by distance: 1000m segment counts 10× more than 100m segment
+            
+            This gives a realistic VMG based on your sustained upwind performance, not just brief moments.
+            """)
     
     # Export button after VMG explanation
     if not segments.empty:
@@ -386,7 +411,7 @@ def _display_performance_stats(segments: pd.DataFrame):
         col1, col2, col3 = st.columns([2, 1.5, 1.5])
         
         with col1:
-            # VMG with special styling and tooltip
+            # VMG with special styling
             st.markdown("""
             <style>
             .vmg-container {
@@ -406,16 +431,24 @@ def _display_performance_stats(segments: pd.DataFrame):
             
             if not upwind_segments.empty and 'avg_speed_knots' in upwind_segments.columns:
                 upwind_vmg = calculate_vmg_upwind(upwind_segments)
-                # Custom VMG display with icon and tooltip
-                st.markdown(f"""
-                <div class="vmg-container">
-                    <span class="vmg-highlight">⭐ VMG</span>
-                    <span title="Velocity Made Good - Your effective speed directly upwind, accounting for sailing angle. Higher is better! See calculation details below.">
-                        <b>{upwind_vmg:.1f} kn</b> ℹ️
-                    </span>
-                </div>
-                """, unsafe_allow_html=True)
-                st.caption("Your effective upwind speed")
+                
+                # Create two sub-columns for VMG display and info button
+                vmg_col, info_col = st.columns([3, 1])
+                
+                with vmg_col:
+                    # Custom VMG display
+                    st.markdown(f"""
+                    <div class="vmg-container">
+                        <span class="vmg-highlight">⭐ VMG</span>
+                        <span><b>{upwind_vmg:.1f} kn</b></span>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    st.caption("Your effective upwind speed")
+                
+                with info_col:
+                    # Clickable info button that toggles the calculation details
+                    if st.button("ℹ️", key="vmg_info_button", help="Click to see how VMG is calculated"):
+                        st.session_state.show_vmg_details = not st.session_state.get('show_vmg_details', False)
             else:
                 st.metric("Upwind VMG", "N/A")
         
