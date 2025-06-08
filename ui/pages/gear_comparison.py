@@ -305,12 +305,6 @@ def display_page():
         if comparison_data:
             comparison_df = pd.DataFrame(comparison_data)
             st.dataframe(comparison_df, use_container_width=True)
-            
-            st.info("""
-            **Note on metrics:**
-            - For angles (port and starboard), smaller values are better (closer to wind)
-            - For speeds, larger values are better
-            """)
         else:
             st.info("No data available for comparison.")
         
