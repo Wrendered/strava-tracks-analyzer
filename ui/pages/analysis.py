@@ -382,12 +382,40 @@ def _display_performance_stats(segments: pd.DataFrame):
         upwind_segments = segments[segments.get('direction', '').str.lower() == 'upwind'] if 'direction' in segments.columns else pd.DataFrame()
         downwind_segments = segments[segments.get('direction', '').str.lower() == 'downwind'] if 'direction' in segments.columns else pd.DataFrame()
         
-        col1, col2, col3, col4 = st.columns(4)
+        # Create three columns with emphasis on VMG
+        col1, col2, col3 = st.columns([2, 1.5, 1.5])
         
         with col1:
+            # VMG with special styling and tooltip
+            st.markdown("""
+            <style>
+            .vmg-container {
+                position: relative;
+                display: inline-block;
+            }
+            .vmg-highlight {
+                background: linear-gradient(45deg, #0068C9, #00A3FF);
+                padding: 2px 8px;
+                border-radius: 4px;
+                color: white;
+                font-weight: bold;
+                margin-right: 5px;
+            }
+            </style>
+            """, unsafe_allow_html=True)
+            
             if not upwind_segments.empty and 'avg_speed_knots' in upwind_segments.columns:
                 upwind_vmg = calculate_vmg_upwind(upwind_segments)
-                st.metric("Upwind VMG", f"{upwind_vmg:.1f} kn")
+                # Custom VMG display with icon and tooltip
+                st.markdown(f"""
+                <div class="vmg-container">
+                    <span class="vmg-highlight">⭐ VMG</span>
+                    <span title="Velocity Made Good - Your effective speed directly upwind, accounting for sailing angle. Higher is better! See calculation details below.">
+                        <b>{upwind_vmg:.1f} kn</b> ℹ️
+                    </span>
+                </div>
+                """, unsafe_allow_html=True)
+                st.caption("Your effective upwind speed")
             else:
                 st.metric("Upwind VMG", "N/A")
         
@@ -406,14 +434,6 @@ def _display_performance_stats(segments: pd.DataFrame):
                 st.metric("Avg Upwind Angle", f"{avg_upwind_angle:.0f}°")
             else:
                 st.metric("Avg Upwind Angle", "N/A")
-        
-        with col4:
-            if 'tack' in segments.columns:
-                port_count = len(segments[segments['tack'] == 'Port'])
-                starboard_count = len(segments[segments['tack'] == 'Starboard'])
-                st.metric("Port/Starboard", f"{port_count}/{starboard_count}")
-            else:
-                st.metric("Port/Starboard", "N/A")
                 
     except Exception as e:
         st.error(f"Performance stats error: {e}")
