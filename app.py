@@ -206,17 +206,33 @@ def main():
         st.markdown("<h3>Current Features</h3>", unsafe_allow_html=True)
         
         features = [
-            ("Track Visualization", "See your route with color-coded speed segments"),
+            ("Track Visualization", "See your route with color-coded speed segments and wind arrows"),
             ("Segment Analysis", "Break down your session into consistent sailing segments"),
-            ("Wind Direction Estimation", "Calculate the average wind direction from your sailing patterns"),
+            ("Wind Direction Estimation", "Iterative refinement algorithm improves your initial wind estimate"),
             ("Polar Performance Plot", "Visualize your speed at different angles to the wind"),
-            ("Upwind/Downwind Analysis", "See your best angles and speeds on each tack"),
-            ("Performance Metrics", "Get insights on your sailing efficiency"),
-            ("Gear Comparison", "Compare performance across different equipment setups")
+            ("Upwind/Downwind Analysis", "Distance-weighted VMG calculations for accurate performance metrics"),
+            ("Performance Metrics", "Get insights on your sailing efficiency and tack symmetry"),
+            ("Gear Comparison", "Compare performance across different equipment setups"),
+            ("Bulk Upload", "Analyze multiple sessions at once for efficient comparison"),
+            ("Unified Analysis", "All pages use identical algorithms for consistent results")
         ]
         
         for feature, description in features:
             st.markdown(f"* **{feature}** - {description}")
+        
+        # Recent Updates
+        st.markdown("<h3>Recent Updates (June 2025)</h3>", unsafe_allow_html=True)
+        
+        updates = [
+            ("🔧 Complete Refactoring", "Unified analysis pipeline ensures consistent calculations everywhere"),
+            ("📊 Fixed VMG Calculations", "All pages now show identical, accurate VMG values"),
+            ("🎯 Better Wind Estimation", "Iterative algorithm refines your initial wind direction guess"),
+            ("📈 Improved Comparison Table", "Shows same metrics as main page including Avg Speed and Avg Upwind Angle"),
+            ("🚀 Performance", "Removed 100+ lines of duplicate code for faster, cleaner operation")
+        ]
+        
+        for update, description in updates:
+            st.markdown(f"* **{update}** - {description}")
         
         # Upcoming Features
         st.markdown("""
