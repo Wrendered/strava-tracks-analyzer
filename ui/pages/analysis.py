@@ -14,18 +14,10 @@ import math
 # Import from core modules
 from core.gpx import load_gpx_file
 from core.metrics import calculate_track_metrics, calculate_average_angle_from_segments
-# Import segment detection from segments package, wind analysis from calculations
-from core.segments import find_consistent_angle_stretches
-from core.calculations import analyze_wind_angles
-from core.wind.estimate import estimate_wind_direction
-from core.wind.models import WindEstimate
-from core.metrics_advanced import (
-    calculate_vmg_upwind,
-    calculate_vmg_downwind,
-    estimate_wind_direction_weighted
-)
-from core.wind.algorithms import estimate_wind_direction_iterative
-from services.track_analysis_service import analyze_track_file, get_analysis_parameters_from_session
+# Keep only needed imports - most analysis is now handled by shared service
+from core.calculations import analyze_wind_angles  # Still needed for fallback wind direction update
+from core.metrics_advanced import calculate_vmg_upwind  # Still needed for performance stats display
+from services.track_analysis_service import analyze_track_data, get_analysis_parameters_from_session
 
 # Import UI components
 from ui.components.visualization import display_track_map, plot_polar_diagram
@@ -57,7 +49,7 @@ logger = logging.getLogger(__name__)
 
 def recalculate_segments(params_changed=None):
     """
-    Central function to recalculate segments with current parameters.
+    Central function to recalculate segments with current parameters using shared service.
     
     Args:
         params_changed: Optional string describing which parameters changed (for logging)
@@ -73,80 +65,36 @@ def recalculate_segments(params_changed=None):
         # Get parameters from session state
         params = get_analysis_parameters_from_session(st.session_state)
         wind_direction = st.session_state.get('wind_direction', DEFAULT_WIND_DIRECTION)
+        filename = st.session_state.get('current_file_name', 'current_track.gpx')
         
         logger.info(f"Recalculating segments: {params_changed or 'all parameters'} changed")
         logger.info(f"Using parameters: {params}, wind_direction={wind_direction}°")
         
-        # Create a temporary file-like object from track data for the shared service
-        class TempTrackData:
-            def __init__(self, track_data):
-                self.track_data = track_data
-                self.name = st.session_state.get('current_file_name', 'current_track.gpx')
-        
-        temp_file = TempTrackData(st.session_state.track_data)
-        
-        # Use shared analysis service - but we need to modify it to accept track_data directly
-        # For now, we'll use the existing logic but this shows the direction for future refactoring
-        
-        # Re-detect stretches from raw data
-        base_stretches = find_consistent_angle_stretches(
-            st.session_state.track_data, 
-            params['angle_tolerance'], 
-            params['min_duration'], 
-            params['min_distance']
+        # Use shared analysis service for consistent processing
+        analysis_result = analyze_track_data(
+            track_data=st.session_state.track_data,
+            initial_wind_direction=wind_direction,
+            filename=filename,
+            **params  # Use exact same parameters as bulk upload
         )
         
-        # Filter by minimum speed
-        if not base_stretches.empty:
-            logger.info(f"Filtering {len(base_stretches)} stretches by min_speed: {params['min_speed']} knots")
-            
-            # Filter by speed in knots directly - stretches['avg_speed_knots'] is already in knots
-            base_stretches = base_stretches[base_stretches['avg_speed_knots'] >= params['min_speed']]
-            logger.info(f"After filtering: {len(base_stretches)} stretches remain")
-            
-            # Use iterative wind estimation to refine the user's initial estimate
-            logger.info(f"Using iterative wind estimation with initial estimate: {wind_direction}°")
-            try:
-                wind_estimate = estimate_wind_direction_iterative(
-                    base_stretches, 
-                    initial_wind=wind_direction,
-                    suspicious_angle_threshold=params['suspicious_angle_threshold']
-                )
-                
-                refined_wind = wind_estimate.direction
-                logger.info(f"Wind direction refined: {wind_direction}° → {refined_wind}°")
-                
-                # DON'T update session state - keep user's input visible
-                # Store refined wind separately for reference
-                st.session_state.refined_wind_direction = refined_wind
-                st.session_state.wind_confidence = wind_estimate.confidence
-                
-                # Show refinement message if significant change
-                if abs(refined_wind - wind_direction) > 2:
-                    st.success(f"🎯 Wind direction refined: {wind_direction}° → {refined_wind:.0f}° (Confidence: {wind_estimate.confidence})")
-                
-                # Use refined wind direction for analysis
-                recalculated = analyze_wind_angles(base_stretches, refined_wind)
-                
-            except Exception as e:
-                logger.warning(f"Wind estimation failed, using original direction: {e}")
-                # Fallback to original wind direction
-                recalculated = analyze_wind_angles(base_stretches, wind_direction)
-            
-            # Add sailing_type column for visualization
-            if 'direction' in recalculated.columns and 'tack' in recalculated.columns:
-                recalculated['sailing_type'] = recalculated['direction'] + ' ' + recalculated['tack']
-            
-            # Update session state
-            st.session_state.track_stretches = recalculated
-            
-            logger.info(f"Successfully recalculated {len(recalculated)} stretches")
-            return True
+        # Store refined wind separately for reference (don't overwrite user input)
+        st.session_state.refined_wind_direction = analysis_result.refined_wind
+        st.session_state.wind_confidence = analysis_result.wind_confidence
+        
+        # Show refinement message if significant change
+        if abs(analysis_result.refined_wind - wind_direction) > 2:
+            st.success(f"🎯 Wind direction refined: {wind_direction}° → {analysis_result.refined_wind:.0f}° (Confidence: {analysis_result.wind_confidence})")
+        
+        # Update session state with processed segments
+        st.session_state.track_stretches = analysis_result.segments
+        
+        logger.info(f"Successfully recalculated {len(analysis_result.segments)} stretches using shared service")
+        return True
+        
     except Exception as e:
         logger.error(f"Error recalculating segments: {e}")
         return False
-    
-    return False
 
 def update_wind_direction(new_wind_direction, recalculate_stretches=True):
     """

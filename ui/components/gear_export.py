@@ -10,6 +10,7 @@ import logging
 from typing import Dict, List, Optional, Any, Tuple
 
 from core.models.gear_item import GearItem
+from services.track_analysis_service import analyze_track_data, create_gear_item_from_analysis, get_analysis_parameters_from_session
 
 logger = logging.getLogger(__name__)
 
@@ -88,17 +89,37 @@ def export_to_comparison_button(segments: pd.DataFrame, filename: str) -> Option
                         return None
                     
                     try:
-                        # Create a GearItem from the current session state
-                        gear_item = GearItem.from_session_state(title, st.session_state)
-                        
-                        # Store in session state
-                        st.session_state.gear_items[gear_item.id] = gear_item
-                        
-                        logger.info(f"Exported gear item: {title} (ID: {gear_item.id})")
-                        st.success(f"✅ Successfully exported '{title}' to Gear Comparison!")
-                        
-                        # Return the item ID
-                        return gear_item.id
+                        # Use shared service for consistent analysis
+                        if 'track_data' in st.session_state and st.session_state.track_data is not None:
+                            # Get parameters and wind direction
+                            params = get_analysis_parameters_from_session(st.session_state)
+                            wind_direction = st.session_state.get('wind_direction', 90)
+                            
+                            # Analyze track data using shared service
+                            analysis_result = analyze_track_data(
+                                track_data=st.session_state.track_data,
+                                initial_wind_direction=wind_direction,
+                                filename=filename,
+                                **params
+                            )
+                            
+                            # Create gear item from analysis result
+                            gear_item = create_gear_item_from_analysis(analysis_result, title)
+                            
+                            # Store in session state
+                            if 'gear_items' not in st.session_state:
+                                st.session_state.gear_items = {}
+                            st.session_state.gear_items[gear_item.id] = gear_item
+                            
+                            logger.info(f"Exported gear item: {title} (ID: {gear_item.id})")
+                            st.success(f"✅ Successfully exported '{title}' to Gear Comparison!")
+                            
+                            # Return the item ID
+                            return gear_item.id
+                        else:
+                            st.error("No track data available to export.")
+                            return None
+                            
                     except Exception as e:
                         logger.error(f"Error exporting gear item: {e}")
                         st.error(f"Error exporting to comparison: {e}")

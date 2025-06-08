@@ -93,22 +93,26 @@ class TrackAnalysisResult:
         self.avg_upwind_angle = self.upwind_segments['angle_to_wind'].mean() if not self.upwind_segments.empty else None
 
 
-def analyze_track_file(file, 
+def analyze_track_data(track_data: pd.DataFrame,
                       initial_wind_direction: float,
+                      filename: str = "current_track.gpx",
+                      metadata: Optional[Dict[str, Any]] = None,
                       angle_tolerance: float = 25,
                       min_distance: float = DEFAULT_MIN_DISTANCE,
                       min_duration: float = DEFAULT_MIN_DURATION, 
                       min_speed: float = DEFAULT_MIN_SPEED,
                       suspicious_angle_threshold: float = 20) -> TrackAnalysisResult:
     """
-    Analyze a single track file using the standard pipeline.
+    Analyze track data that's already loaded into a DataFrame.
     
-    This function provides the exact same analysis pipeline used by the main page,
-    ensuring consistent results across all parts of the application.
+    This function provides the exact same analysis pipeline as analyze_track_file
+    but works with data already in memory (e.g., from session state).
     
     Args:
-        file: File object or file path to analyze
+        track_data: DataFrame containing track data
         initial_wind_direction: Initial wind direction estimate in degrees
+        filename: Name for the track (for display purposes)
+        metadata: Optional metadata dict
         angle_tolerance: Angle tolerance for segment detection
         min_distance: Minimum segment distance in meters
         min_duration: Minimum segment duration in seconds  
@@ -121,12 +125,11 @@ def analyze_track_file(file,
     Raises:
         Exception: If analysis fails
     """
-    filename = getattr(file, 'name', str(file))
+    if metadata is None:
+        metadata = {}
     
     try:
-        # Step 1: Load GPX file (same as main page)
-        track_data, metadata = load_gpx_file(file)
-        logger.info(f"Loaded {filename} with {len(track_data)} points")
+        logger.info(f"Analyzing track data for {filename} with {len(track_data)} points")
         
         # Step 2: Detect segments (same as main page)
         segments = find_consistent_angle_stretches(
@@ -181,6 +184,59 @@ def analyze_track_file(file,
             refined_wind=refined_wind,
             wind_confidence=wind_estimate.confidence,
             filename=filename
+        )
+        
+    except Exception as e:
+        logger.error(f"Error analyzing {filename}: {e}")
+        raise
+
+
+def analyze_track_file(file, 
+                      initial_wind_direction: float,
+                      angle_tolerance: float = 25,
+                      min_distance: float = DEFAULT_MIN_DISTANCE,
+                      min_duration: float = DEFAULT_MIN_DURATION, 
+                      min_speed: float = DEFAULT_MIN_SPEED,
+                      suspicious_angle_threshold: float = 20) -> TrackAnalysisResult:
+    """
+    Analyze a single track file using the standard pipeline.
+    
+    This function loads a GPX file and delegates to analyze_track_data
+    for consistent analysis across all parts of the application.
+    
+    Args:
+        file: File object or file path to analyze
+        initial_wind_direction: Initial wind direction estimate in degrees
+        angle_tolerance: Angle tolerance for segment detection
+        min_distance: Minimum segment distance in meters
+        min_duration: Minimum segment duration in seconds  
+        min_speed: Minimum speed filter in knots
+        suspicious_angle_threshold: Threshold for wind estimation
+        
+    Returns:
+        TrackAnalysisResult: Complete analysis results
+        
+    Raises:
+        Exception: If analysis fails
+    """
+    filename = getattr(file, 'name', str(file))
+    
+    try:
+        # Step 1: Load GPX file
+        track_data, metadata = load_gpx_file(file)
+        logger.info(f"Loaded {filename} with {len(track_data)} points")
+        
+        # Step 2: Delegate to analyze_track_data for consistent processing
+        return analyze_track_data(
+            track_data=track_data,
+            initial_wind_direction=initial_wind_direction,
+            filename=filename,
+            metadata=metadata,
+            angle_tolerance=angle_tolerance,
+            min_distance=min_distance,
+            min_duration=min_duration,
+            min_speed=min_speed,
+            suspicious_angle_threshold=suspicious_angle_threshold
         )
         
     except Exception as e:

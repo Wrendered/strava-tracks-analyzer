@@ -22,7 +22,8 @@ from core.constants import (
     MIN_SCORE_FOR_USER_GUIDED, MIN_SCORE_FOR_MULTI_ANGLE, ANGLE_CLUSTER_RANGE_DEGREES
 )
 from core.wind.models import WindEstimate
-from core.metrics_advanced import detect_suspicious_segments, calculate_segment_quality_score
+from core.metrics_advanced import calculate_segment_quality_score
+from utils.segment_analysis import detect_suspicious_segments
 from core.calculations import analyze_wind_angles
 
 logger = logging.getLogger(__name__)
