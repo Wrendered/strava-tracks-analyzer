@@ -389,8 +389,8 @@ def _display_performance_stats(segments: pd.DataFrame):
             if not upwind_segments.empty and 'avg_speed_knots' in upwind_segments.columns:
                 upwind_vmg = calculate_vmg_upwind(upwind_segments)
                 
-                # Use regular metric display but with star and info icon
-                vmg_label = "⭐ Upwind VMG ℹ️"
+                # Use regular metric display with star
+                vmg_label = "⭐ Upwind VMG"
                 st.metric(vmg_label, f"{upwind_vmg:.1f} kn", 
                          help="Velocity Made Good - Your effective speed directly upwind. Scroll down for calculation details.")
             else:
