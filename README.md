@@ -131,7 +131,15 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for more details on the project structure
 
 ## Changelog
 
-### Version 1.2.0 (Latest)
+### Version 1.2.1 (Latest) - June 8, 2025
+- **COMPLETED**: Full unification of analysis pipeline - main page, bulk upload, and export all use shared service
+- **FIXED**: Export to comparison now shows correct Avg Speed and Avg Upwind Angle (was showing N/A)
+- **FIXED**: Circular import issues in core.wind module
+- **REFACTORED**: Removed 100+ lines of duplicate analysis code from main page
+- **ADDED**: analyze_track_data() function for in-memory track processing
+- **IMPROVED**: True single source of truth for all track analysis
+
+### Version 1.2.0 - June 7, 2025
 - **MAJOR**: Created unified analysis pipeline for consistency between pages
 - **FIXED**: VMG calculation discrepancy between main page and bulk upload
 - **IMPROVED**: Comparison table now shows identical metrics to main page
