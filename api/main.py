@@ -106,6 +106,35 @@ async def health_check():
     return {"status": "healthy", "service": "foil-lab-api"}
 
 
+@app.get("/api/config")
+async def get_config():
+    """Get default configuration values."""
+    from config.settings import (
+        DEFAULT_MIN_DURATION, DEFAULT_MIN_DISTANCE, DEFAULT_ANGLE_TOLERANCE,
+        DEFAULT_MIN_SPEED
+    )
+    from core.constants import DEFAULT_SUSPICIOUS_ANGLE_THRESHOLD
+    
+    return {
+        "defaults": {
+            "wind_direction": 90.0,  # Default wind direction (East)
+            "angle_tolerance": DEFAULT_ANGLE_TOLERANCE,
+            "min_duration": DEFAULT_MIN_DURATION,
+            "min_distance": DEFAULT_MIN_DISTANCE,
+            "min_speed": DEFAULT_MIN_SPEED,
+            "suspicious_angle_threshold": DEFAULT_SUSPICIOUS_ANGLE_THRESHOLD
+        },
+        "ranges": {
+            "wind_direction": {"min": 0, "max": 359, "step": 1},
+            "angle_tolerance": {"min": 5, "max": 45, "step": 1},
+            "min_duration": {"min": 5, "max": 60, "step": 1},
+            "min_distance": {"min": 10, "max": 200, "step": 10},
+            "min_speed": {"min": 3, "max": 15, "step": 0.5},
+            "suspicious_angle_threshold": {"min": 15, "max": 35, "step": 1}
+        }
+    }
+
+
 @app.post("/api/analyze-track", response_model=TrackAnalysisResponse)
 async def analyze_track(
     file: UploadFile = File(...),
