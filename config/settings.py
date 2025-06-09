@@ -1,13 +1,21 @@
 """
-Application settings and constants.
+Application settings and configuration.
 
-This module centralizes all configuration values and constants used throughout the application,
-making it easier to maintain and modify application behavior.
+This module contains application-specific configuration, UI settings, and defaults.
+For algorithmic constants, see core.constants module.
 """
 
 import os
 import logging
 from typing import Dict, Any
+
+# Import algorithmic constants from core module
+from core.constants import (
+    DEFAULT_SUSPICIOUS_ANGLE_THRESHOLD,
+    DEFAULT_MIN_SEGMENT_DISTANCE_METERS,
+    DEFAULT_VMG_ANGLE_RANGE_DEGREES,
+    UPWIND_DOWNWIND_BOUNDARY_DEGREES
+)
 
 # App information
 APP_NAME = "WingWizard"
@@ -20,20 +28,20 @@ DATA_DIR = os.path.join(BASE_DIR, "data")
 LOGS_DIR = os.path.join(BASE_DIR, "logs")
 PLOTS_DIR = os.path.join(BASE_DIR, "plots")
 
-# Wind direction settings
-DEFAULT_WIND_DIRECTION = 90  # Degrees (East)
+# Application-specific defaults (reference core constants where appropriate)
+DEFAULT_WIND_DIRECTION = UPWIND_DOWNWIND_BOUNDARY_DEGREES  # 90 degrees (East)
 
-# Segment detection parameters - adjusted for better track detection with short tacks
-DEFAULT_ANGLE_TOLERANCE = 25  # Degrees - increased from 20° to detect more tacks with variations
-DEFAULT_MIN_DURATION = 15  # Seconds - reduced from 20s to capture shorter tacks
-DEFAULT_MIN_DISTANCE = 75  # Meters - reduced from 100m for better track coverage
-DEFAULT_MIN_SPEED = 8.0  # Knots - lowered from 10.0 to include more valid segments
-DEFAULT_SUSPICIOUS_ANGLE_THRESHOLD = 20  # Degrees - angles below this are physically impossible
+# UI defaults for segment detection parameters
+DEFAULT_ANGLE_TOLERANCE = 25  # Degrees - UI default, can be overridden
+DEFAULT_MIN_DURATION = 15  # Seconds - UI default
+DEFAULT_MIN_DISTANCE = 75  # Meters - UI default  
+DEFAULT_MIN_SPEED = 8.0  # Knots - UI default
+# DEFAULT_SUSPICIOUS_ANGLE_THRESHOLD imported from core.constants
 
-# Advanced algorithm configuration
-DEFAULT_MIN_SEGMENT_DISTANCE = 50  # Minimum segment distance for algorithms in meters
-DEFAULT_VMG_ANGLE_RANGE = 20  # Range around best angle to include for VMG calculation
-DEFAULT_ACTIVE_SPEED_THRESHOLD = 5.0  # Speeds below this are not considered "active"
+# Algorithm configuration (reference core constants)
+DEFAULT_MIN_SEGMENT_DISTANCE = DEFAULT_MIN_SEGMENT_DISTANCE_METERS  # From core.constants
+DEFAULT_VMG_ANGLE_RANGE = DEFAULT_VMG_ANGLE_RANGE_DEGREES  # From core.constants  
+DEFAULT_ACTIVE_SPEED_THRESHOLD = 5.0  # App-specific threshold
 
 # Wind direction estimation parameters
 WIND_ESTIMATION_METHODS = ["weighted", "iterative", "basic"]
@@ -98,8 +106,8 @@ class SegmentConfig:
     MIN_DURATION = DEFAULT_MIN_DURATION
     MIN_DISTANCE = DEFAULT_MIN_DISTANCE
     MIN_SPEED = DEFAULT_MIN_SPEED
-    SUSPICIOUS_ANGLE_THRESHOLD = DEFAULT_SUSPICIOUS_ANGLE_THRESHOLD
-    MIN_SEGMENT_DISTANCE = DEFAULT_MIN_SEGMENT_DISTANCE
+    SUSPICIOUS_ANGLE_THRESHOLD = DEFAULT_SUSPICIOUS_ANGLE_THRESHOLD  # From core.constants
+    MIN_SEGMENT_DISTANCE = DEFAULT_MIN_SEGMENT_DISTANCE  # From core.constants
     MIN_POINTS = DEFAULT_MIN_POINTS_FOR_SEGMENT
     
     @classmethod
@@ -122,7 +130,7 @@ class WindConfig:
     ESTIMATION_METHOD = DEFAULT_WIND_ESTIMATION_METHOD
     MAX_ITERATIONS = DEFAULT_MAX_ITERATIONS
     CONVERGENCE_THRESHOLD = DEFAULT_CONVERGENCE_THRESHOLD
-    VMG_ANGLE_RANGE = DEFAULT_VMG_ANGLE_RANGE
+    VMG_ANGLE_RANGE = DEFAULT_VMG_ANGLE_RANGE  # From core.constants
     
     @classmethod
     def as_dict(cls) -> Dict[str, Any]:

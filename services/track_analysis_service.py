@@ -14,7 +14,7 @@ from typing import Dict, Any, Optional, Tuple
 from core.gpx import load_gpx_file
 from core.segments import find_consistent_angle_stretches
 from core.calculations import analyze_wind_angles
-from core.wind.algorithms import estimate_wind_direction_iterative
+from core.wind.factory import estimate_wind_direction_factory, WindEstimationParams
 from core.metrics_advanced import calculate_vmg_upwind
 from core.models.gear_item import GearItem
 from config.settings import DEFAULT_MIN_DISTANCE, DEFAULT_MIN_DURATION, DEFAULT_MIN_SPEED
@@ -44,7 +44,7 @@ class TrackAnalysisResult:
         # Calculate derived metrics
         self._calculate_summary_metrics()
     
-    def _calculate_summary_metrics(self):
+    def _calculate_summary_metrics(self) -> None:
         """Calculate summary metrics from segments."""
         if self.segments.empty:
             self.upwind_segments = pd.DataFrame()
@@ -157,11 +157,16 @@ def analyze_track_data(track_data: pd.DataFrame,
                 filename=filename
             )
         
-        # Step 4: Estimate wind direction (same as main page)
-        wind_estimate = estimate_wind_direction_iterative(
+        # Step 4: Estimate wind direction using factory pattern
+        wind_params = WindEstimationParams(
+            suspicious_angle_threshold=suspicious_angle_threshold,
+            min_segment_distance=min_distance
+        )
+        wind_estimate = estimate_wind_direction_factory(
             segments,
             initial_wind=initial_wind_direction,
-            suspicious_angle_threshold=suspicious_angle_threshold
+            method='iterative',  # Use best algorithm
+            params=wind_params
         )
         
         refined_wind = wind_estimate.direction

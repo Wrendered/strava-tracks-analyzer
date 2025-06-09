@@ -390,24 +390,25 @@ def estimate_wind_direction_weighted(
         estimated_wind = None
         tack_difference = None
         
-        if has_both_tacks:
+        if has_both_tacks and port_angle is not None and starboard_angle is not None:
             # Calculate the average angle weighted by total distance of each tack
             total_distance = port_total_distance + starboard_total_distance
-            port_weight = port_total_distance / total_distance
-            starboard_weight = starboard_total_distance / total_distance
-            
-            # Calculate weighted average angle
-            weighted_avg_angle = (port_angle * port_weight + starboard_angle * starboard_weight)
-            
-            # Calculate angle difference between tacks
-            tack_difference = abs(port_angle - starboard_angle)
-            
-            # Apply the balanced approach: calculate port-starboard imbalance
-            angle_difference = starboard_angle - port_angle
-            
-            # Apply weighted adjustment to user wind direction
-            wind_adjustment = angle_difference / 2.0
-            estimated_wind = (user_wind_direction - wind_adjustment) % FULL_CIRCLE_DEGREES
+            if total_distance > 0:
+                port_weight = port_total_distance / total_distance
+                starboard_weight = starboard_total_distance / total_distance
+                
+                # Calculate weighted average angle
+                weighted_avg_angle = (port_angle * port_weight + starboard_angle * starboard_weight)
+                
+                # Calculate angle difference between tacks
+                tack_difference = abs(port_angle - starboard_angle)
+                
+                # Apply the balanced approach: calculate port-starboard imbalance
+                angle_difference = starboard_angle - port_angle
+                
+                # Apply weighted adjustment to user wind direction
+                wind_adjustment = angle_difference / 2.0
+                estimated_wind = (user_wind_direction - wind_adjustment) % FULL_CIRCLE_DEGREES
             
             logger.info(f"Estimated wind: {estimated_wind:.1f}° (adjustment: {wind_adjustment:.1f}°)")
             
@@ -419,13 +420,13 @@ def estimate_wind_direction_weighted(
             # 2. Port and starboard angles are reasonably similar
             # 3. We have significant total distance
             if (len(port_tack) >= MIN_SEGMENTS_FOR_ESTIMATION and len(starboard_tack) >= MIN_SEGMENTS_FOR_ESTIMATION and
-                tack_difference < MEDIUM_CONFIDENCE_TACK_DIFF_DEGREES and total_distance > HIGH_CONFIDENCE_MIN_DISTANCE_METERS):
+                tack_difference is not None and tack_difference < MEDIUM_CONFIDENCE_TACK_DIFF_DEGREES and total_distance > HIGH_CONFIDENCE_MIN_DISTANCE_METERS):
                 confidence = "high"
             
             # Lower confidence if:
             # 1. Port and starboard angles differ greatly
             # 2. We have few segments in either tack
-            if tack_difference > MAX_TACK_DIFF_FOR_ADJUSTMENT_DEGREES or (len(port_tack) < 2 or len(starboard_tack) < 2):
+            if (tack_difference is not None and tack_difference > MAX_TACK_DIFF_FOR_ADJUSTMENT_DEGREES) or (len(port_tack) < 2 or len(starboard_tack) < 2):
                 confidence = "low"
         else:
             # Single-tack estimation (less reliable)

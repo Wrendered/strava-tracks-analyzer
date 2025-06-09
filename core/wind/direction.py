@@ -326,7 +326,7 @@ def detect_and_remove_outliers(
         
         # Avoid circular import by using a deferred import within the function
         # Import from the package (which re-exports the original function)
-        from core.segments import analyze_wind_angles as analyze_wind_angles_fn
+        from core.calculations import analyze_wind_angles as analyze_wind_angles_fn
         stretches_with_angles = analyze_wind_angles_fn(stretches.copy(), wind_direction)
         
         # Verify required columns exist

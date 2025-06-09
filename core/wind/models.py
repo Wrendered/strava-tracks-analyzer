@@ -32,7 +32,7 @@ class WindEstimate:
     @property
     def tack_difference(self) -> Optional[float]:
         """Get the difference between port and starboard angles."""
-        if self.has_both_tacks:
+        if self.has_both_tacks and self.port_angle is not None and self.starboard_angle is not None:
             return abs(self.port_angle - self.starboard_angle)
         return None
     

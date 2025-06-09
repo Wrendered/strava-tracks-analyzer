@@ -13,12 +13,11 @@ from typing import Dict, List, Optional, Tuple, Union, Any
 from dataclasses import dataclass
 
 from utils.state_manager import StateManager, WindStateManager
-from core.wind.estimate import estimate_wind_direction
+from core.wind.factory import estimate_wind_direction_factory, WindEstimationParams, WindEstimationFactory
 from core.wind.models import WindEstimate
 from core.metrics_advanced import (
     calculate_vmg_upwind,
-    calculate_vmg_downwind,
-    estimate_wind_direction_weighted
+    calculate_vmg_downwind
 )
 from config.settings import (
     DEFAULT_SUSPICIOUS_ANGLE_THRESHOLD,
@@ -77,12 +76,12 @@ class WindService:
             logger.info(f"Wind direction set to: {new_wind_direction}°")
         
         # If we don't need to recalculate stretches or don't have any, we're done
-        track_stretches = StateManager.get('track_stretches')
+        track_stretches: Optional[pd.DataFrame] = StateManager.get('track_stretches')
         if not recalculate_stretches or track_stretches is None:
             return True
         
         # If we have track data, use the segment service to recalculate
-        track_data = StateManager.get('track_data')
+        track_data: Optional[pd.DataFrame] = StateManager.get('track_data')
         if track_data is not None:
             return SegmentService.recalculate_segments("wind direction")
         
@@ -123,27 +122,18 @@ class WindService:
             )
         
         # Use the appropriate estimation method
-        if method == "weighted":
-            result = estimate_wind_direction_weighted(
-                segments.copy(),
-                params.initial_wind_direction,
-                suspicious_angle_threshold=params.suspicious_angle_threshold,
-                min_segment_distance=params.min_segment_distance
-            )
-        elif method == "iterative":
-            result = estimate_wind_direction(
-                segments.copy(),
-                params.initial_wind_direction,
-                method="iterative",
-                suspicious_angle_threshold=params.suspicious_angle_threshold
-            )
-        else:
-            result = estimate_wind_direction(
-                segments.copy(),
-                params.initial_wind_direction,
-                method="basic",
-                suspicious_angle_threshold=params.suspicious_angle_threshold
-            )
+        # Use factory pattern for all wind estimation
+        wind_params = WindEstimationParams(
+            suspicious_angle_threshold=params.suspicious_angle_threshold,
+            min_segment_distance=params.min_segment_distance
+        )
+        
+        result = estimate_wind_direction_factory(
+            segments.copy(),
+            initial_wind=params.initial_wind_direction,
+            method=method,
+            params=wind_params
+        )
         
         return result
     

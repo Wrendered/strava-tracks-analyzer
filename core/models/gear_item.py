@@ -81,6 +81,10 @@ class GearItem:
                 upwind = stretches[stretches.get('direction', '').str.lower() == 'upwind'] if 'direction' in stretches.columns else pd.DataFrame()
                 downwind = stretches[stretches.get('direction', '').str.lower() == 'downwind'] if 'direction' in stretches.columns else pd.DataFrame()
                 
+                # Reset best tack variables for recalculation
+                best_port_upwind = {"angle": None, "speed": None}
+                best_starboard_upwind = {"angle": None, "speed": None}
+                
                 # Get upwind metrics
                 if not upwind.empty:
                     port_upwind = upwind[upwind['tack'] == 'Port']
@@ -107,7 +111,8 @@ class GearItem:
                         vmg_upwind = calculate_vmg_upwind(upwind)
                     
                     # Calculate upwind progress speed (legacy field) when we have both tacks
-                    if all(best_port_upwind.values()) and all(best_starboard_upwind.values()):
+                    if (best_port_upwind["angle"] is not None and best_port_upwind["speed"] is not None and 
+                        best_starboard_upwind["angle"] is not None and best_starboard_upwind["speed"] is not None):
                         import math
                         # Simply average the angles
                         pointing_power = (best_port_upwind["angle"] + best_starboard_upwind["angle"]) / 2

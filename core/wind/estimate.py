@@ -64,7 +64,7 @@ def estimate_wind_direction(
     if 'angle_to_wind' not in stretches.columns or 'tack' not in stretches.columns:
         try:
             # Import analyze_wind_angles here to avoid circular import
-            from core.segments import analyze_wind_angles as analyze_wind_angles_fn
+            from core.calculations import analyze_wind_angles as analyze_wind_angles_fn
             # Use initial wind direction to calculate angles before estimation
             analyzed_stretches = analyze_wind_angles_fn(stretches.copy(), initial_wind_direction)
         except Exception as e:
