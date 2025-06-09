@@ -142,7 +142,7 @@ async def analyze_track(
         
         # Load GPX data
         logger.info(f"Processing file: {file.filename}")
-        track_data = load_gpx_file(file_obj, file.filename)
+        track_data, metadata = load_gpx_file(file_obj)
         
         if track_data.empty:
             raise HTTPException(status_code=400, detail="No valid track data found in GPX file")
@@ -221,7 +221,7 @@ async def estimate_wind(
         # Read and process file
         content = await file.read()
         file_obj = io.BytesIO(content)
-        track_data = load_gpx_file(file_obj, file.filename)
+        track_data, metadata = load_gpx_file(file_obj)
         
         if track_data.empty:
             raise HTTPException(status_code=400, detail="No valid track data found")
