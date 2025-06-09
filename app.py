@@ -234,21 +234,6 @@ def main():
         for update, description in updates:
             st.markdown(f"* **{update}** - {description}")
         
-        # Upcoming Features
-        st.markdown("""
-        <div style="margin-top: 30px; padding: 15px; background-color: var(--secondary-background-color, #f8f9fa); color: var(--text-color, #262730); border-radius: 8px; border: 1px solid var(--primary-color, rgba(0, 104, 201, 0.2));">
-            <h3>Upcoming Features</h3>
-            <p>These features are in development and coming soon:</p>
-            <ul>
-                <li><strong>Progress Tracking</strong> - Monitor your improvement over time</li>
-                <li><strong>Automated Insights</strong> - Get personalized tips based on your sailing patterns</li>
-                <li><strong>Session Highlights</strong> - Identify your fastest runs and best maneuvers</li>
-            </ul>
-            <p style="font-size: 0.9rem; font-style: italic; margin-top: 10px;">
-                Have a feature you'd like to see? Contact me on Instagram <a href="https://www.instagram.com/heart_wrench/" target="_blank">@heart_wrench</a>!
-            </p>
-        </div>
-        """, unsafe_allow_html=True)
     
     logger.info(f"App started - {st.session_state.page} page")
 
