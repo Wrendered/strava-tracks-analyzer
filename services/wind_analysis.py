@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from core.wind.factory import estimate_wind_direction_factory, WindEstimationParams
 from core.wind.models import WindEstimate
 from core.calculations import analyze_wind_angles
+from services.interfaces import WindAnalysisService
 
 
 logger = logging.getLogger(__name__)
@@ -38,7 +39,7 @@ class WindAnalysisResult:
     error_message: Optional[str] = None
 
 
-class PureWindAnalysisService:
+class PureWindAnalysisService(WindAnalysisService):
     """
     Pure wind analysis service with no external dependencies.
     
@@ -47,25 +48,33 @@ class PureWindAnalysisService:
     All data is passed explicitly as parameters.
     """
     
-    @staticmethod
     def estimate_wind_direction(
+        self,
         segments: pd.DataFrame,
-        params: WindAnalysisParams
+        initial_wind: float,
+        **kwargs
     ) -> WindEstimate:
         """
         Estimate wind direction from sailing segments.
         
         Args:
             segments: DataFrame with sailing segments
-            params: Parameters for wind estimation
+            initial_wind: Initial wind direction estimate
+            **kwargs: Additional parameters (suspicious_angle_threshold, estimation_method, etc.)
             
         Returns:
             WindEstimate with direction and confidence
         """
+        # Extract parameters from kwargs with defaults
+        suspicious_angle_threshold = kwargs.get('suspicious_angle_threshold', 20.0)
+        estimation_method = kwargs.get('estimation_method', 'iterative')
+        min_segment_distance = kwargs.get('min_segment_distance', 50.0)
+        max_iterations = kwargs.get('max_iterations', 5)
+        
         if segments.empty:
             logger.warning("No segments provided for wind estimation")
             return WindEstimate(
-                direction=params.initial_wind_direction,
+                direction=initial_wind,
                 confidence="None",
                 port_average_angle=0,
                 starboard_average_angle=0,
@@ -75,21 +84,21 @@ class PureWindAnalysisService:
             )
         
         logger.info(f"Estimating wind direction from {len(segments)} segments")
-        logger.info(f"Initial wind direction: {params.initial_wind_direction}°")
+        logger.info(f"Initial wind direction: {initial_wind}°")
         
         try:
             # Create wind estimation parameters
             wind_params = WindEstimationParams(
-                suspicious_angle_threshold=params.suspicious_angle_threshold,
-                min_segment_distance=params.min_segment_distance,
-                max_iterations=params.max_iterations
+                suspicious_angle_threshold=suspicious_angle_threshold,
+                min_segment_distance=min_segment_distance,
+                max_iterations=max_iterations
             )
             
             # Use factory pattern for wind estimation
             result = estimate_wind_direction_factory(
                 segments.copy(),
-                initial_wind=params.initial_wind_direction,
-                method=params.estimation_method,
+                initial_wind=initial_wind,
+                method=estimation_method,
                 params=wind_params
             )
             
@@ -100,7 +109,7 @@ class PureWindAnalysisService:
         except Exception as e:
             logger.error(f"Wind estimation failed: {e}")
             return WindEstimate(
-                direction=params.initial_wind_direction,
+                direction=initial_wind,
                 confidence="None",
                 port_average_angle=0,
                 starboard_average_angle=0,
@@ -109,8 +118,8 @@ class PureWindAnalysisService:
                 starboard_segments=0
             )
     
-    @staticmethod
     def update_segments_with_wind(
+        self,
         segments: pd.DataFrame,
         wind_direction: float
     ) -> pd.DataFrame:
@@ -138,8 +147,8 @@ class PureWindAnalysisService:
             logger.error(f"Error updating segments with wind: {e}")
             return segments
     
-    @staticmethod
     def analyze_wind_performance(
+        self,
         segments: pd.DataFrame,
         wind_direction: float
     ) -> Dict[str, Any]:
