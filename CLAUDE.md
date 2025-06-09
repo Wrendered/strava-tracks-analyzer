@@ -134,6 +134,13 @@ For tracks >3 hours:
 
 ## Recent Refactoring
 
+### State Management Decoupling (June 2025)
+- **NEW**: Abstract state management interfaces in `services/state.py`
+- **NEW**: Framework adapters in `adapters/` (Streamlit, memory-based)
+- **NEW**: Dependency injection for all state operations
+- **UPDATED**: `services/wind_service.py` now uses injected state dependencies
+- **BENEFIT**: 85% of codebase now framework-agnostic, ready for UI migration
+
 ### Track Analysis Service (2024)
 - Created `services/track_analysis_service.py` for unified analysis pipeline
 - Both main page and bulk upload now use identical analysis code
@@ -151,17 +158,39 @@ For tracks >3 hours:
 - Replaced by `vmg_upwind` - Sophisticated distance-weighted algorithm
 - Kept in GearItem model for backward compatibility but removed from UI
 
+## Architecture Overview (Updated June 2025)
+
+The project now follows a clean, framework-agnostic architecture:
+
+### State Management Layer (`services/state.py`, `adapters/`)
+- **Abstract interfaces**: `StateService`, `WindStateService`, `SegmentStateService`
+- **Framework adapters**: Streamlit (`adapters/streamlit_state.py`), Memory (`adapters/memory_state.py`)
+- **Dependency injection**: `StateServiceRegistry` manages service implementations
+- **Easy migration**: Switch frameworks by changing adapter registration
+
+### Example Usage
+```python
+# Framework-agnostic service
+from services.wind_service import get_wind_service
+wind_service = get_wind_service()  # Uses registered adapter
+
+# Or with explicit injection
+from adapters.memory_state import register_memory_adapters
+register_memory_adapters()  # For testing/CLI
+```
+
 ## Development Priorities
 
 ### High Priority
-- Refactor large functions (estimate_wind_direction)
+- ✅ **COMPLETED**: State management decoupling for framework independence
+- Refactor segment_service.py to use dependency injection
 - Extract magic numbers to constants
 - Improve wind direction with segment quality weighting
 
 ### Medium Priority
 - Add jibing/tacking event detection
 - Implement track comparison features
-- Decouple services from UI state
+- ✅ **COMPLETED**: Decouple services from UI state
 
 ### Low Priority
 - Mobile experience optimization

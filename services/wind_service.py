@@ -12,7 +12,7 @@ import math
 from typing import Dict, List, Optional, Tuple, Union, Any
 from dataclasses import dataclass
 
-from utils.state_manager import StateManager, WindStateManager
+from services.state import StateServiceRegistry, WindStateService, SegmentStateService
 from core.wind.factory import estimate_wind_direction_factory, WindEstimationParams, WindEstimationFactory
 from core.wind.models import WindEstimate
 from core.metrics_advanced import (
@@ -47,8 +47,20 @@ class WindService:
     VMG calculations, and other wind-related functionality.
     """
     
-    @staticmethod
-    def update_wind_direction(new_wind_direction: float, recalculate_stretches: bool = True) -> bool:
+    def __init__(self, 
+                 wind_state: Optional[WindStateService] = None,
+                 segment_state: Optional[SegmentStateService] = None):
+        """
+        Initialize WindService with optional state services.
+        
+        Args:
+            wind_state: Wind state service (uses registry if None)
+            segment_state: Segment state service (uses registry if None)
+        """
+        self._wind_state = wind_state or StateServiceRegistry.get_wind_service()
+        self._segment_state = segment_state or StateServiceRegistry.get_segment_service()
+    
+    def update_wind_direction(self, new_wind_direction: float, recalculate_stretches: bool = True) -> bool:
         """
         Update wind direction and optionally recalculate segments.
         
@@ -64,10 +76,10 @@ class WindService:
         from services.segment_service import SegmentService
         
         # Store the previous wind direction for logging
-        prev_wind = WindStateManager.get_wind_direction()
+        prev_wind = self._wind_state.get_wind_direction()
         
         # Update the wind direction in session state
-        WindStateManager.set_wind_direction(new_wind_direction)
+        self._wind_state.set_wind_direction(new_wind_direction)
         
         # Log the change
         if prev_wind is not None and prev_wind != new_wind_direction:
@@ -76,27 +88,27 @@ class WindService:
             logger.info(f"Wind direction set to: {new_wind_direction}°")
         
         # If we don't need to recalculate stretches or don't have any, we're done
-        track_stretches: Optional[pd.DataFrame] = StateManager.get('track_stretches')
+        track_stretches: Optional[pd.DataFrame] = self._segment_state.get_track_stretches()
         if not recalculate_stretches or track_stretches is None:
             return True
         
         # If we have track data, use the segment service to recalculate
-        track_data: Optional[pd.DataFrame] = StateManager.get('track_data')
+        track_data: Optional[pd.DataFrame] = self._segment_state.get_track_data()
         if track_data is not None:
             return SegmentService.recalculate_segments("wind direction")
         
         # Fallback: try to update existing stretches directly
         try:
             recalculated = analyze_wind_angles(track_stretches, new_wind_direction)
-            StateManager.set('track_stretches', recalculated)
+            self._segment_state.set_track_stretches(recalculated)
             logger.info(f"Updated existing stretches with wind direction {new_wind_direction}°")
             return True
         except Exception as e:
             logger.error(f"Error updating existing stretches: {e}")
             return False
     
-    @staticmethod
     def estimate_wind_direction(
+        self,
         segments: pd.DataFrame,
         params: Optional[WindAnalysisParams] = None,
         method: str = "weighted"
@@ -113,9 +125,10 @@ class WindService:
             WindEstimate: Object with estimated wind direction and confidence
         """
         if params is None:
+            segment_params = self._segment_state.get_segment_parameters()
             params = WindAnalysisParams(
-                initial_wind_direction=WindStateManager.get_wind_direction(),
-                suspicious_angle_threshold=StateManager.get(
+                initial_wind_direction=self._wind_state.get_wind_direction(),
+                suspicious_angle_threshold=segment_params.get(
                     'suspicious_angle_threshold', DEFAULT_SUSPICIOUS_ANGLE_THRESHOLD),
                 min_segment_distance=DEFAULT_MIN_SEGMENT_DISTANCE,
                 vmg_angle_range=DEFAULT_VMG_ANGLE_RANGE
@@ -241,3 +254,31 @@ class WindService:
             float: Combined angle in degrees
         """
         return (best_port['angle_to_wind'] + best_starboard['angle_to_wind']) / 2
+
+
+# Factory function for backward compatibility
+def get_wind_service() -> WindService:
+    """
+    Get a WindService instance with injected dependencies.
+    
+    Returns:
+        WindService instance with registered state services
+    """
+    return WindService()
+
+
+# Backward compatibility functions that use the factory
+def update_wind_direction(new_wind_direction: float, recalculate_stretches: bool = True) -> bool:
+    """Backward compatibility function for updating wind direction."""
+    service = get_wind_service()
+    return service.update_wind_direction(new_wind_direction, recalculate_stretches)
+
+
+def estimate_wind_direction(
+    segments: pd.DataFrame,
+    params: Optional[WindAnalysisParams] = None,
+    method: str = "weighted"
+) -> WindEstimate:
+    """Backward compatibility function for estimating wind direction."""
+    service = get_wind_service()
+    return service.estimate_wind_direction(segments, params, method)

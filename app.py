@@ -24,8 +24,24 @@ logger = logging.getLogger(__name__)
 from ui.pages.analysis import display_page as display_analysis_page
 from ui.pages.gear_comparison import display_page as display_gear_comparison_page
 
+def initialize_state_management():
+    """Initialize state management adapters for the application."""
+    from adapters.streamlit_state import register_streamlit_adapters
+    
+    try:
+        register_streamlit_adapters()
+        logger.info("State management adapters initialized successfully")
+    except Exception as e:
+        logger.error(f"Failed to initialize state management: {e}")
+        raise
+
 def main():
     """Main application entry point"""
+    # Initialize state management (only needs to happen once)
+    if 'state_adapters_initialized' not in st.session_state:
+        initialize_state_management()
+        st.session_state.state_adapters_initialized = True
+    
     # Set page configuration
     st.set_page_config(
         layout=PAGE_CONFIG["layout"], 
