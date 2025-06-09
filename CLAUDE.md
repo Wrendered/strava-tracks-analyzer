@@ -179,11 +179,69 @@ from adapters.memory_state import register_memory_adapters
 register_memory_adapters()  # For testing/CLI
 ```
 
+## UI Framework Migration Strategy (June 2025)
+
+### **GOAL**: Migrate from Streamlit to Next.js + React for Better UX
+
+**Target Framework**: Next.js + React + TypeScript
+- **Visualization**: Recharts/D3.js for polar plots
+- **Maps**: React-Leaflet for interactive track maps  
+- **UI**: Shadcn/ui + Tailwind CSS for beautiful, professional design
+- **Backend**: FastAPI serving existing algorithms via REST API
+
+### **Dual-Track Development Approach**
+
+**Phase 1: API Backend Extraction (1 week)**
+- Create FastAPI backend that serves existing algorithms
+- Use memory state adapters (framework-agnostic)
+- Endpoints for track analysis, wind estimation, gear comparison
+- Deploy as separate service (Railway/Render)
+
+**Phase 2: Next.js Frontend (2-3 weeks)**  
+- New repository: `foil-lab-web`
+- React components for file upload, parameter controls, visualizations
+- API integration with Python backend
+- Deploy to Vercel
+
+**Phase 3: Parallel Operation (2-4 weeks)**
+- Streamlit app continues serving current users (unchanged)
+- Next.js app available as "beta" version
+- Gather user feedback, iterate on new UI
+- Gradual user migration when ready
+
+**Phase 4: Primary Migration (1-2 weeks)**
+- Next.js becomes primary version
+- Streamlit becomes "classic" version
+- Eventually sunset Streamlit when migration complete
+
+### **Benefits of This Strategy**
+✅ **Zero Risk**: Current users unaffected during development  
+✅ **Code Reuse**: Algorithms work in both frontends via state management decoupling  
+✅ **User Choice**: Let users try both versions  
+✅ **Learning Friendly**: Experiment with React without pressure  
+✅ **Professional Result**: Modern, mobile-friendly, beautiful UI
+
+### **Repository Structure**
+```
+📁 strava-tracks-analyzer/     (This repo - Streamlit + API backend)
+└── api/                       (NEW: FastAPI endpoints)
+
+📁 foil-lab-web/              (NEW: Next.js frontend repo)
+├── src/components/           (React components)
+├── src/pages/               (Next.js pages)  
+└── src/lib/                 (API integration)
+```
+
+### **Deployment URLs**
+- **Current Streamlit**: Keep existing deployment
+- **New API Backend**: `https://foil-lab-api.railway.app`
+- **New Next.js Frontend**: `https://foil-lab.vercel.app`
+
 ## Development Priorities
 
-### High Priority
+### High Priority  
 - ✅ **COMPLETED**: State management decoupling for framework independence
-- Refactor segment_service.py to use dependency injection
+- 🚀 **IN PROGRESS**: FastAPI backend extraction for Next.js migration
 - Extract magic numbers to constants
 - Improve wind direction with segment quality weighting
 
@@ -191,8 +249,9 @@ register_memory_adapters()  # For testing/CLI
 - Add jibing/tacking event detection
 - Implement track comparison features
 - ✅ **COMPLETED**: Decouple services from UI state
+- Complete Next.js frontend development
 
 ### Low Priority
-- Mobile experience optimization
-- Tutorial/onboarding flow
+- Mobile experience optimization (Next.js will handle this)
+- Tutorial/onboarding flow (Next.js will have better UX for this)
 - Performance caching for expensive calculations
