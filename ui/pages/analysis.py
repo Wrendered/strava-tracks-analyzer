@@ -23,6 +23,7 @@ from services.track_analysis_service import analyze_track_data, get_analysis_par
 from ui.components.visualization import display_track_map, plot_polar_diagram
 from ui.components.filters import segment_selection_bar, segment_details_table, segment_selection_checkboxes
 from ui.components.wind_ui import wind_direction_selector, reestimate_wind_button
+from ui.components.wind_override import render_wind_override_control, get_effective_wind_direction
 from ui.components.gear_export import export_to_comparison_button
 from ui.components.parameter_controls import render_parameter_sidebar, render_manual_recalc_button
 from ui.components.file_upload import render_file_upload_section, get_current_file_info
@@ -131,12 +132,39 @@ def _count_vmg_segments(segments: pd.DataFrame) -> dict:
         logger.error(f"Error counting VMG segments: {e}")
         return None
 
-def recalculate_segments(params_changed=None):
+
+def _display_wind_override_control(segments: pd.DataFrame, on_override_callback) -> None:
+    """
+    Display wind direction override control with proper context.
+    
+    Args:
+        segments: Current segments data (for context)
+        on_override_callback: Callback function for wind overrides
+    """
+    # Get algorithm wind direction (refined by algorithm)
+    algorithm_wind = st.session_state.get('refined_wind_direction') or st.session_state.get('algorithm_wind_direction')
+    
+    # Get current active wind direction
+    current_wind = st.session_state.get('wind_direction', 90.0)
+    
+    # Only show control if we have algorithm results
+    if algorithm_wind is not None:
+        render_wind_override_control(
+            algorithm_wind=algorithm_wind,
+            current_wind=current_wind,
+            on_override_callback=on_override_callback
+        )
+    else:
+        # Fallback for when algorithm hasn't run yet
+        st.info("💡 Wind direction override will be available after track analysis completes")
+
+def recalculate_segments(params_changed=None, override_wind_direction=None):
     """
     Central function to recalculate segments with current parameters using shared service.
     
     Args:
         params_changed: Optional string describing which parameters changed (for logging)
+        override_wind_direction: Optional wind direction to use instead of session state value
         
     Returns:
         bool: True if recalculation was successful, False otherwise
@@ -148,7 +176,14 @@ def recalculate_segments(params_changed=None):
     try:
         # Get parameters from session state
         params = get_analysis_parameters_from_session(st.session_state)
-        wind_direction = st.session_state.get('wind_direction', DEFAULT_WIND_DIRECTION)
+        
+        # Use override wind direction if provided, otherwise get from session state
+        if override_wind_direction is not None:
+            wind_direction = override_wind_direction
+            logger.info(f"Using override wind direction: {wind_direction}°")
+        else:
+            wind_direction = st.session_state.get('wind_direction', DEFAULT_WIND_DIRECTION)
+        
         filename = st.session_state.get('current_file_name', 'current_track.gpx')
         
         logger.info(f"Recalculating segments: {params_changed or 'all parameters'} changed")
@@ -162,13 +197,21 @@ def recalculate_segments(params_changed=None):
             **params  # Use exact same parameters as bulk upload
         )
         
-        # Store refined wind separately for reference (don't overwrite user input)
-        st.session_state.refined_wind_direction = analysis_result.refined_wind
-        st.session_state.wind_confidence = analysis_result.wind_confidence
-        
-        # Show refinement message if significant change
-        if abs(analysis_result.refined_wind - wind_direction) > 2:
-            st.success(f"🎯 Wind direction refined: {wind_direction}° → {analysis_result.refined_wind:.0f}° (Confidence: {analysis_result.wind_confidence})")
+        # Handle refined wind direction based on whether we're using an override
+        if override_wind_direction is not None:
+            # When using override, store the original algorithm result but don't display refinement message
+            st.session_state.algorithm_wind_direction = analysis_result.refined_wind
+            st.session_state.wind_confidence = analysis_result.wind_confidence
+            # Keep the override as the active wind direction
+            st.session_state.wind_direction = override_wind_direction
+        else:
+            # Normal case: store refined wind and show refinement message if significant change
+            st.session_state.refined_wind_direction = analysis_result.refined_wind
+            st.session_state.wind_confidence = analysis_result.wind_confidence
+            
+            # Show refinement message if significant change
+            if abs(analysis_result.refined_wind - wind_direction) > 2:
+                st.success(f"🎯 Wind direction refined: {wind_direction}° → {analysis_result.refined_wind:.0f}° (Confidence: {analysis_result.wind_confidence})")
         
         # Update session state with processed segments
         st.session_state.track_stretches = analysis_result.segments
@@ -253,8 +296,14 @@ def display_page():
         st.rerun()
     
     def on_wind_change(wind_direction: float):
-        """Handle wind direction changes."""
+        """Handle wind direction changes from initial input."""
         update_wind_direction(wind_direction, recalculate_stretches=True)
+        st.rerun()
+    
+    def on_wind_override(wind_direction: float):
+        """Handle manual wind direction override."""
+        logger.info(f"Manual wind override applied: {wind_direction}°")
+        recalculate_segments("wind override", override_wind_direction=wind_direction)
         st.rerun()
     
     # Render sidebar parameters
@@ -289,10 +338,10 @@ def display_page():
     # Skip excessive segment count message
     
     # Simple, direct analysis display
-    _display_simple_analysis(track_data, current_segments, filename)
+    _display_simple_analysis(track_data, current_segments, filename, on_wind_override)
 
 
-def _display_simple_analysis(track_data: pd.DataFrame, segments: pd.DataFrame, filename: str):
+def _display_simple_analysis(track_data: pd.DataFrame, segments: pd.DataFrame, filename: str, on_wind_override):
     """Simple, reliable analysis display with visualizations."""
     
     # Basic metrics - no redundant success message
@@ -316,6 +365,9 @@ def _display_simple_analysis(track_data: pd.DataFrame, segments: pd.DataFrame, f
             if 'avg_speed_knots' in segments.columns:
                 max_speed = segments['avg_speed_knots'].max()
                 st.metric("Max Speed", f"{max_speed:.1f} kn")
+    
+    # Wind direction override control (before map, affects everything below)
+    _display_wind_override_control(segments, on_wind_override)
     
     # Restore original map with color-coded segments
     st.subheader("🗺️ Track Map")
@@ -385,9 +437,8 @@ def _display_original_map(track_data: pd.DataFrame, segments: pd.DataFrame, show
             st.info("No data for map")
             return
             
-        # Get wind direction from session state - use REFINED if available
-        wind_direction = st.session_state.get('refined_wind_direction', 
-                                             st.session_state.get('wind_direction', 90))
+        # Get effective wind direction (respects override if active)
+        wind_direction = get_effective_wind_direction()
         
         # Need to ensure segments have the required columns for color coding
         if 'sailing_type' not in segments.columns:
@@ -449,9 +500,8 @@ def _display_polar_diagram(track_data: pd.DataFrame, segments: pd.DataFrame):
                 st.info("Wind angle information not available for polar diagram")
                 return
         
-        # Use refined wind direction if available, otherwise user's estimate
-        wind_direction = st.session_state.get('refined_wind_direction',
-                                             st.session_state.get('wind_direction', 90))
+        # Get effective wind direction (respects override if active)
+        wind_direction = get_effective_wind_direction()
         
         # Create and display the polar diagram
         fig = plot_polar_diagram(segments, wind_direction)
