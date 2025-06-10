@@ -4,7 +4,7 @@ from streamlit_folium import folium_static
 import numpy as np
 from matplotlib.colors import LinearSegmentedColormap
 
-def display_track_map(gpx_data, stretches, wind_direction, estimated_wind=None, selected_segments=None):
+def display_track_map(gpx_data, stretches, wind_direction, estimated_wind=None, selected_segments=None, vmg_segments=None):
     """
     Display a map with color-coded track segments that allows segment selection.
     
@@ -14,6 +14,7 @@ def display_track_map(gpx_data, stretches, wind_direction, estimated_wind=None, 
     - wind_direction: Wind direction in degrees
     - estimated_wind: Estimated wind direction (optional)
     - selected_segments: List of segment IDs that are currently selected
+    - vmg_segments: List of segment indices that are used in VMG calculation (optional)
     
     Returns:
     - List of selected segment IDs
@@ -53,24 +54,37 @@ def display_track_map(gpx_data, stretches, wind_direction, estimated_wind=None, 
         track_segment = list(zip(segment['latitude'], segment['longitude']))
         
         sailing_type = stretch['sailing_type']
-        color = colors.get(sailing_type, 'green')
         is_selected = idx in selected_segments
         is_suspicious = float(stretch['angle_to_wind']) < 15
+        is_vmg_segment = vmg_segments is not None and idx in vmg_segments
         
-        # Set appearance based on selection and suspiciousness
-        weight = 5 if is_selected else 2
-        opacity = 0.9 if is_selected else 0.4
+        # Determine color based on VMG highlighting
+        if is_vmg_segment:
+            # Bright green/yellow for VMG segments
+            color = '#00FF00'  # Bright green
+            weight = 6
+            opacity = 1.0
+        else:
+            # Normal colors for non-VMG segments
+            color = colors.get(sailing_type, 'green')
+            weight = 5 if is_selected else 2
+            opacity = 0.9 if is_selected else 0.4
+            # Dim non-VMG segments when VMG highlighting is on
+            if vmg_segments is not None:
+                opacity = opacity * 0.5  # Make them more transparent
         
         # Different styles for suspicious segments
         dash_array = None
-        if is_suspicious:
+        if is_suspicious and not is_vmg_segment:
             dash_array = "5, 5"
         
         tooltip = (f"{sailing_type}: {stretch['bearing']:.1f}° " 
                  f"(Wind angle: {stretch['angle_to_wind']:.1f}°, "
                  f"Speed: {stretch['speed']:.1f} knots)")
         
-        if is_suspicious:
+        if is_vmg_segment:
+            tooltip += "\n✅ VMG SEGMENT"
+        elif is_suspicious:
             tooltip += "\n⚠️ SUSPICIOUS ANGLE"
         
         folium.PolyLine(
@@ -145,10 +159,20 @@ def display_track_map(gpx_data, stretches, wind_direction, estimated_wind=None, 
     m.fit_bounds([sw, ne])
     
     # Add a more compact legend in a proper position
+    vmg_legend_section = ''
+    if vmg_segments is not None:
+        vmg_count = len(vmg_segments)
+        vmg_legend_section = f'''
+        <div style="margin: 5px 0; padding: 5px; background-color: #f0f8ff; border-radius: 3px;">
+            <span><i style="background: #00FF00; width: 20px; height: 6px; display: inline-block;"></i> <b>VMG Segments ({vmg_count})</b></span>
+        </div>
+        '''
+    
     legend_html = f'''
     <div style="position: absolute; top: 10px; right: 10px; z-index: 1000; background-color: white; 
     padding: 10px; border: 2px solid grey; border-radius: 5px; max-width: 300px; font-size: 12px;">
     <p style="font-weight: bold; margin: 0 0 5px 0;">Legend</p>
+    {vmg_legend_section}
     <div style="display: grid; grid-template-columns: auto auto; grid-gap: 5px; margin-bottom: 5px;">
         <span><i style="background: #FF0000; width: 20px; height: 4px; display: inline-block;"></i> Port Upwind</span>
         <span><i style="background: #0000FF; width: 20px; height: 4px; display: inline-block;"></i> Starboard Upwind</span>

@@ -47,6 +47,90 @@ DEFAULT_VMG_ANGLE_RANGE = 20       # Range around best angle to include for VMG 
 
 logger = logging.getLogger(__name__)
 
+def _identify_vmg_segments(segments: pd.DataFrame) -> list:
+    """
+    Identify which segments are used in the VMG calculation.
+    
+    Returns list of segment indices that contribute to VMG.
+    """
+    if segments.empty:
+        return []
+    
+    try:
+        # Import the same logic used in VMG calculation
+        from core.metrics_advanced import calculate_segment_quality_score
+        from utils.segment_analysis import detect_suspicious_segments
+        from core.constants import (
+            QUALITY_SCORE_FACTOR, DEFAULT_MIN_SEGMENT_DISTANCE_METERS,
+            DEFAULT_VMG_ANGLE_RANGE_DEGREES, DEFAULT_SUSPICIOUS_ANGLE_THRESHOLD
+        )
+        
+        # Filter to upwind segments only
+        upwind_segments = segments[segments.get('direction', '').str.lower() == 'upwind'] if 'direction' in segments.columns else pd.DataFrame()
+        
+        if upwind_segments.empty:
+            return []
+        
+        # Step 1: Filter suspicious segments (same as VMG calculation)
+        suspicious_segments = detect_suspicious_segments(
+            upwind_segments,
+            min_angle_to_wind=DEFAULT_SUSPICIOUS_ANGLE_THRESHOLD,
+            min_segment_length=DEFAULT_MIN_SEGMENT_DISTANCE_METERS
+        )
+        
+        filtered_upwind = suspicious_segments[~suspicious_segments['suspicious']]
+        
+        if filtered_upwind.empty:
+            return []
+        
+        # Step 2: Find best angle (same as VMG calculation)
+        quality_scores = calculate_segment_quality_score(filtered_upwind)
+        filtered_upwind = filtered_upwind.copy()
+        filtered_upwind['combined_score'] = filtered_upwind['angle_to_wind'] - (quality_scores * QUALITY_SCORE_FACTOR)
+        
+        best_segment = filtered_upwind.sort_values('combined_score').iloc[0]
+        best_angle = best_segment['angle_to_wind']
+        
+        # Step 3: Filter by angle range (same as VMG calculation)
+        max_angle_threshold = min(best_angle + DEFAULT_VMG_ANGLE_RANGE_DEGREES, 90)
+        vmg_segments = filtered_upwind[filtered_upwind['angle_to_wind'] <= max_angle_threshold]
+        
+        # Return the indices of segments used in VMG
+        return vmg_segments.index.tolist()
+        
+    except Exception as e:
+        logger.error(f"Error identifying VMG segments: {e}")
+        return []
+
+
+def _count_vmg_segments(segments: pd.DataFrame) -> dict:
+    """
+    Count how many segments are used in VMG calculation.
+    
+    Returns dict with 'used' and 'total' upwind segment counts.
+    """
+    if segments.empty:
+        return None
+    
+    try:
+        # Get upwind segments
+        upwind_segments = segments[segments.get('direction', '').str.lower() == 'upwind'] if 'direction' in segments.columns else pd.DataFrame()
+        
+        if upwind_segments.empty:
+            return None
+        
+        # Get VMG segments
+        vmg_indices = _identify_vmg_segments(segments)
+        
+        return {
+            'used': len(vmg_indices),
+            'total': len(upwind_segments)
+        }
+        
+    except Exception as e:
+        logger.error(f"Error counting VMG segments: {e}")
+        return None
+
 def recalculate_segments(params_changed=None):
     """
     Central function to recalculate segments with current parameters using shared service.
@@ -235,7 +319,21 @@ def _display_simple_analysis(track_data: pd.DataFrame, segments: pd.DataFrame, f
     
     # Restore original map with color-coded segments
     st.subheader("🗺️ Track Map")
-    _display_original_map(track_data, segments)
+    
+    # Add VMG highlighting control
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        show_vmg_segments = st.checkbox("🎯 Highlight VMG segments", 
+                                      value=False,
+                                      help="Show which segments are used in the VMG calculation")
+    with col2:
+        if show_vmg_segments:
+            # Count VMG segments
+            vmg_segments_count = _count_vmg_segments(segments)
+            if vmg_segments_count:
+                st.metric("VMG Segments", f"{vmg_segments_count['used']}/{vmg_segments_count['total']}")
+    
+    _display_original_map(track_data, segments, show_vmg_segments)
     
     # Add performance stats back
     st.subheader("📊 Performance Analysis")
@@ -278,8 +376,8 @@ def _display_simple_analysis(track_data: pd.DataFrame, segments: pd.DataFrame, f
         _display_segments_table(segments)
 
 
-def _display_original_map(track_data: pd.DataFrame, segments: pd.DataFrame):
-    """Display the original color-coded map with wind arrows."""
+def _display_original_map(track_data: pd.DataFrame, segments: pd.DataFrame, show_vmg_segments: bool = False):
+    """Display the original color-coded map with wind arrows and optional VMG highlighting."""
     try:
         from utils.visualization import display_track_map
         
@@ -310,20 +408,14 @@ def _display_original_map(track_data: pd.DataFrame, segments: pd.DataFrame):
             segments = segments.copy()
             segments['speed'] = segments['avg_speed_knots']
         
-        # Debug: Compare filtering methods
-        if 'angle_to_wind' in segments.columns:
-            # Method 1: What performance stats use (direction == 'upwind')
-            upwind_by_direction = segments[segments.get('direction', '').str.lower() == 'upwind']
-            
-            # Method 2: What polar plot might use (angle < 90°) 
-            upwind_by_angle = segments[segments['angle_to_wind'] < 90]
-            
-            if not upwind_by_direction.empty and not upwind_by_angle.empty:
-                st.caption(f"Performance uses {len(upwind_by_direction)} 'upwind' segments (angles {upwind_by_direction['angle_to_wind'].min():.0f}°-{upwind_by_direction['angle_to_wind'].max():.0f}°)")
-                st.caption(f"Polar plot uses {len(upwind_by_angle)} <90° segments (angles {upwind_by_angle['angle_to_wind'].min():.0f}°-{upwind_by_angle['angle_to_wind'].max():.0f}°)")
         
-        # Call the original display function
-        display_track_map(track_data, segments, wind_direction)
+        # If VMG highlighting is requested, identify VMG segments
+        vmg_segments_list = None
+        if show_vmg_segments:
+            vmg_segments_list = _identify_vmg_segments(segments)
+        
+        # Call the original display function with VMG highlighting
+        display_track_map(track_data, segments, wind_direction, vmg_segments=vmg_segments_list)
         
     except Exception as e:
         st.error(f"Map display error: {e}")
