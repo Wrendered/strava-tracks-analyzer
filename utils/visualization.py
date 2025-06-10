@@ -32,6 +32,13 @@ def display_track_map(gpx_data, stretches, wind_direction, estimated_wind=None, 
     # Create the map
     m = folium.Map()
     
+    # Calculate map bounds for wind lines
+    lat_min, lat_max = gpx_data['latitude'].min(), gpx_data['latitude'].max()
+    lon_min, lon_max = gpx_data['longitude'].min(), gpx_data['longitude'].max()
+    
+    # Add parallel wind direction lines across the map
+    _add_wind_direction_lines(m, wind_direction, lat_min, lat_max, lon_min, lon_max)
+    
     # Add the full track in light gray
     full_track = list(zip(gpx_data['latitude'], gpx_data['longitude']))
     folium.PolyLine(full_track, color='lightgray', weight=2, opacity=0.7).add_to(m)
@@ -215,6 +222,97 @@ def display_track_map(gpx_data, stretches, wind_direction, estimated_wind=None, 
     
     # We don't return anything
     return None
+
+def _add_wind_direction_lines(map_obj, wind_direction, lat_min, lat_max, lon_min, lon_max):
+    """
+    Add parallel lines across the map showing wind direction.
+    
+    Args:
+        map_obj: Folium map object
+        wind_direction: Wind direction in degrees (where wind is coming FROM)
+        lat_min, lat_max: Latitude bounds of the map
+        lon_min, lon_max: Longitude bounds of the map
+    """
+    import math
+    
+    # Calculate map dimensions
+    lat_range = lat_max - lat_min
+    lon_range = lon_max - lon_min
+    
+    # Extend bounds slightly to ensure lines cover the whole visible area
+    lat_buffer = lat_range * 0.2
+    lon_buffer = lon_range * 0.2
+    
+    lat_min_extended = lat_min - lat_buffer
+    lat_max_extended = lat_max + lat_buffer
+    lon_min_extended = lon_min - lon_buffer
+    lon_max_extended = lon_max + lon_buffer
+    
+    # Calculate the diagonal of the extended map area
+    diagonal = math.sqrt((lat_max_extended - lat_min_extended)**2 + 
+                        (lon_max_extended - lon_min_extended)**2)
+    
+    # Number of lines based on map size (aim for lines every ~10% of the diagonal)
+    num_lines = max(5, min(15, int(diagonal * 10)))
+    
+    # Convert wind direction to radians (wind comes FROM this direction)
+    wind_rad = math.radians(wind_direction)
+    
+    # Calculate perpendicular direction for the line spacing
+    perp_rad = wind_rad + math.pi / 2
+    
+    # Line spacing
+    spacing = diagonal / num_lines
+    
+    # Center of the map
+    center_lat = (lat_min + lat_max) / 2
+    center_lon = (lon_min + lon_max) / 2
+    
+    # Draw lines perpendicular to wind direction
+    for i in range(-num_lines // 2, num_lines // 2 + 1):
+        # Calculate offset from center
+        offset_lat = i * spacing * math.cos(perp_rad)
+        offset_lon = i * spacing * math.sin(perp_rad) / math.cos(math.radians(center_lat))
+        
+        # Start and end points of the line (extending well beyond map bounds)
+        start_lat = center_lat + offset_lat - diagonal * math.cos(wind_rad)
+        start_lon = center_lon + offset_lon - diagonal * math.sin(wind_rad) / math.cos(math.radians(center_lat))
+        
+        end_lat = center_lat + offset_lat + diagonal * math.cos(wind_rad)
+        end_lon = center_lon + offset_lon + diagonal * math.sin(wind_rad) / math.cos(math.radians(center_lat))
+        
+        # Draw the line
+        folium.PolyLine(
+            [(start_lat, start_lon), (end_lat, end_lon)],
+            color='#666666',  # Gray color
+            weight=1,         # Thin lines
+            opacity=0.3,      # Semi-transparent
+            dash_array='5,10' # Dashed pattern
+        ).add_to(map_obj)
+        
+        # Add small arrows on some lines to indicate direction
+        if i % 3 == 0:  # Every third line gets an arrow
+            # Calculate a point along the line for the arrow
+            arrow_lat = center_lat + offset_lat
+            arrow_lon = center_lon + offset_lon
+            
+            # Create arrow marker
+            arrow_html = f'''
+            <div style="transform: rotate({wind_direction}deg); 
+                        font-size: 16px; color: #666666; opacity: 0.5;">
+                ↓
+            </div>
+            '''
+            
+            folium.Marker(
+                [arrow_lat, arrow_lon],
+                icon=folium.DivIcon(
+                    icon_size=(16, 16),
+                    icon_anchor=(8, 8),
+                    html=arrow_html
+                )
+            ).add_to(map_obj)
+
 
 def plot_polar_diagram(stretches, wind_direction):
     """Create a polar plot showing sailing performance at different angles to wind."""
