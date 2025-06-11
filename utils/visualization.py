@@ -37,7 +37,14 @@ def display_track_map(gpx_data, stretches, wind_direction, estimated_wind=None, 
     lon_min, lon_max = gpx_data['longitude'].min(), gpx_data['longitude'].max()
     
     # Add parallel wind direction lines across the map
-    _add_wind_direction_lines(m, wind_direction, lat_min, lat_max, lon_min, lon_max)
+    try:
+        print(f"Adding wind lines: wind_direction={wind_direction}, bounds=({lat_min:.4f},{lat_max:.4f},{lon_min:.4f},{lon_max:.4f})")
+        _add_wind_direction_lines(m, wind_direction, lat_min, lat_max, lon_min, lon_max)
+        print("Wind lines added successfully")
+    except Exception as e:
+        print(f"Error adding wind lines: {e}")
+        import traceback
+        traceback.print_exc()
     
     # Add the full track in light gray
     full_track = list(zip(gpx_data['latitude'], gpx_data['longitude']))
@@ -235,6 +242,9 @@ def _add_wind_direction_lines(map_obj, wind_direction, lat_min, lat_max, lon_min
     """
     import math
     
+    print(f"_add_wind_direction_lines called with wind_direction={wind_direction}")
+    print(f"Map bounds: lat={lat_min:.4f} to {lat_max:.4f}, lon={lon_min:.4f} to {lon_max:.4f}")
+    
     # Calculate map dimensions
     lat_range = lat_max - lat_min
     lon_range = lon_max - lon_min
@@ -254,6 +264,7 @@ def _add_wind_direction_lines(map_obj, wind_direction, lat_min, lat_max, lon_min
     
     # Number of lines based on map size (aim for lines every ~10% of the diagonal)
     num_lines = max(5, min(15, int(diagonal * 10)))
+    print(f"Calculated {num_lines} lines for diagonal {diagonal:.4f}")
     
     # Convert wind direction to radians (wind comes FROM this direction)
     wind_rad = math.radians(wind_direction)
@@ -282,13 +293,16 @@ def _add_wind_direction_lines(map_obj, wind_direction, lat_min, lat_max, lon_min
         end_lon = center_lon + offset_lon + diagonal * math.sin(wind_rad) / math.cos(math.radians(center_lat))
         
         # Draw the line
-        folium.PolyLine(
+        line = folium.PolyLine(
             [(start_lat, start_lon), (end_lat, end_lon)],
             color='#666666',  # Gray color
             weight=1,         # Thin lines
             opacity=0.3,      # Semi-transparent
             dash_array='5,10' # Dashed pattern
-        ).add_to(map_obj)
+        )
+        line.add_to(map_obj)
+        if i == 0:  # Only print for the first line to avoid spam
+            print(f"Added line {i}: ({start_lat:.4f},{start_lon:.4f}) to ({end_lat:.4f},{end_lon:.4f})")
         
         # Add small arrows on some lines to indicate direction
         if i % 3 == 0:  # Every third line gets an arrow
