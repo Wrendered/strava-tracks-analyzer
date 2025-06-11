@@ -199,11 +199,19 @@ def recalculate_segments(params_changed=None, override_wind_direction=None):
         
         # Handle refined wind direction based on whether we're using an override
         if override_wind_direction is not None:
-            # When using override, store the original algorithm result but don't display refinement message
+            # When using override, we need to recalculate angle_to_wind with the override value
+            # because analyze_track_data used its own wind estimation
+            from services.wind_analysis import analyze_wind_angles
+            
+            # Store the original algorithm result but don't display refinement message
             st.session_state.algorithm_wind_direction = analysis_result.refined_wind
             st.session_state.wind_confidence = analysis_result.wind_confidence
             # Keep the override as the active wind direction
             st.session_state.wind_direction = override_wind_direction
+            
+            # IMPORTANT: Recalculate angle_to_wind with override wind direction
+            segments_with_override = analyze_wind_angles(analysis_result.segments, override_wind_direction)
+            st.session_state.track_stretches = segments_with_override
         else:
             # Normal case: store refined wind and show refinement message if significant change
             st.session_state.refined_wind_direction = analysis_result.refined_wind
@@ -212,9 +220,9 @@ def recalculate_segments(params_changed=None, override_wind_direction=None):
             # Show refinement message if significant change
             if abs(analysis_result.refined_wind - wind_direction) > 2:
                 st.success(f"🎯 Wind direction refined: {wind_direction}° → {analysis_result.refined_wind:.0f}° (Confidence: {analysis_result.wind_confidence})")
-        
-        # Update session state with processed segments
-        st.session_state.track_stretches = analysis_result.segments
+            
+            # Update session state with processed segments (already have correct angle_to_wind)
+            st.session_state.track_stretches = analysis_result.segments
         
         logger.info(f"Successfully recalculated {len(analysis_result.segments)} stretches using shared service")
         return True
