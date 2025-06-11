@@ -252,8 +252,8 @@ def _add_wind_direction_lines(map_obj, wind_direction, lat_min, lat_max, lon_min
     diagonal = math.sqrt((lat_max_extended - lat_min_extended)**2 + 
                         (lon_max_extended - lon_min_extended)**2)
     
-    # Number of lines based on map size (aim for lines every ~10% of the diagonal)
-    num_lines = max(5, min(15, int(diagonal * 10)))
+    # Number of lines based on map size (3x more dense)
+    num_lines = max(15, min(45, int(diagonal * 30)))
     
     # Convert wind direction to radians (wind comes FROM this direction)
     wind_rad = math.radians(wind_direction)
@@ -286,7 +286,7 @@ def _add_wind_direction_lines(map_obj, wind_direction, lat_min, lat_max, lon_min
             [(start_lat, start_lon), (end_lat, end_lon)],
             color='#666666',  # Gray color
             weight=1,         # Thin lines
-            opacity=0.3,      # Semi-transparent
+            opacity=0.5,      # More visible opacity
             dash_array='5,10' # Dashed pattern
         ).add_to(map_obj)
         
