@@ -38,7 +38,7 @@ This PR implements distance-weighted algorithms that address these issues by:
 
 2. Added configuration parameters:
    - `DEFAULT_MIN_SEGMENT_DISTANCE` (50 meters)
-   - `DEFAULT_VMG_ANGLE_RANGE` (20 degrees)
+   - `DEFAULT_VMG_ANGLE_RANGE` (25 degrees)
 
 3. Updated UI to use new algorithms with better tooltips
 

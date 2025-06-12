@@ -44,7 +44,7 @@ from config.settings import (
 
 # Advanced algorithm configuration
 DEFAULT_MIN_SEGMENT_DISTANCE = 50  # Minimum segment distance for algorithms in meters
-DEFAULT_VMG_ANGLE_RANGE = 20       # Range around best angle to include for VMG calculation
+DEFAULT_VMG_ANGLE_RANGE = 25       # Range around best angle to include for VMG calculation
 
 logger = logging.getLogger(__name__)
 
@@ -409,13 +409,13 @@ def _display_simple_analysis(track_data: pd.DataFrame, segments: pd.DataFrame, f
         
         **Calculation Process:**
         1. **Find best angle**: Combines segment quality (distance, speed) with closeness to wind
-        2. **Select segments**: Only includes segments within 20° of the best angle
+        2. **Select segments**: Only includes segments within 25° of the best angle
         3. **Calculate VMG**: For each selected segment: Speed × cos(angle)
         4. **Distance-weighted average**: Longer segments count more in the final VMG
         
         **Example:**
         - Best angle found: 42° (quality-weighted)
-        - Includes segments: 25°-62° (within 20° range)
+        - Includes segments: 17°-67° (within 25° range)
         - Weights by distance: 1000m segment counts 10× more than 100m segment
         
         This gives a realistic VMG based on your sustained upwind performance, not just brief moments.

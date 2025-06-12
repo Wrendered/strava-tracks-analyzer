@@ -18,7 +18,7 @@ The current wind direction estimation has these limitations:
 
 The current VMG calculation has these issues:
 
-1. **Limited segment selection**: The `VMG upwind-ish` calculation now uses segments within 20° of best upwind angle, which is better, but still has issues.
+1. **Limited segment selection**: The `VMG upwind-ish` calculation now uses segments within 25° of best upwind angle, which is better, but still has issues.
 
 2. **Insufficient weighting**: While we weight segments by distance when averaging VMG, we don't weight by distance when finding the best upwind angle.
 
@@ -99,7 +99,7 @@ def estimate_balanced_wind_direction_with_distance_weighting(
 ```python
 def calculate_vmg_upwind(
     upwind_segments: pd.DataFrame,
-    angle_range: float = 20,  # Range around best angle to include
+    angle_range: float = 25,  # Range around best angle to include
     min_segment_distance: float = 50  # Minimum segment distance (meters)
 ):
     """Calculate improved VMG upwind with distance weighting."""

@@ -48,7 +48,7 @@ MAX_ANGLE_TOLERANCE_CAP_DEGREES = 30.0  # Maximum angle tolerance cap
 MAX_BEARING_CHANGE_DEGREES = 45  # Maximum bearing change for valid segments
 
 # VMG calculation parameters
-DEFAULT_VMG_ANGLE_RANGE_DEGREES = 20  # Range around best angle for VMG calc
+DEFAULT_VMG_ANGLE_RANGE_DEGREES = 25  # Range around best angle for VMG calc
 
 # =============================================================================
 # DISTANCE AND TIME THRESHOLDS
