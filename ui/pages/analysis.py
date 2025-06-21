@@ -48,65 +48,15 @@ DEFAULT_VMG_ANGLE_RANGE = 25       # Range around best angle to include for VMG 
 
 logger = logging.getLogger(__name__)
 
-def _identify_vmg_segments(segments: pd.DataFrame) -> list:
-    """
-    Identify which segments are used in the VMG calculation.
-    
-    Returns list of segment indices that contribute to VMG.
-    """
-    if segments.empty:
-        return []
-    
-    try:
-        # Import the same logic used in VMG calculation
-        from core.metrics_advanced import calculate_segment_quality_score
-        from utils.segment_analysis import detect_suspicious_segments
-        from core.constants import (
-            QUALITY_SCORE_FACTOR, DEFAULT_MIN_SEGMENT_DISTANCE_METERS,
-            DEFAULT_VMG_ANGLE_RANGE_DEGREES, DEFAULT_SUSPICIOUS_ANGLE_THRESHOLD
-        )
-        
-        # Filter to upwind segments only
-        upwind_segments = segments[segments.get('direction', '').str.lower() == 'upwind'] if 'direction' in segments.columns else pd.DataFrame()
-        
-        if upwind_segments.empty:
-            return []
-        
-        # Step 1: Filter suspicious segments (same as VMG calculation)
-        suspicious_segments = detect_suspicious_segments(
-            upwind_segments,
-            min_angle_to_wind=DEFAULT_SUSPICIOUS_ANGLE_THRESHOLD,
-            min_segment_length=DEFAULT_MIN_SEGMENT_DISTANCE_METERS
-        )
-        
-        filtered_upwind = suspicious_segments[~suspicious_segments['suspicious']]
-        
-        if filtered_upwind.empty:
-            return []
-        
-        # Step 2: Find best angle (same as VMG calculation)
-        quality_scores = calculate_segment_quality_score(filtered_upwind)
-        filtered_upwind = filtered_upwind.copy()
-        filtered_upwind['combined_score'] = filtered_upwind['angle_to_wind'] - (quality_scores * QUALITY_SCORE_FACTOR)
-        
-        best_segment = filtered_upwind.sort_values('combined_score').iloc[0]
-        best_angle = best_segment['angle_to_wind']
-        
-        # Step 3: Filter by angle range (same as VMG calculation)
-        max_angle_threshold = min(best_angle + DEFAULT_VMG_ANGLE_RANGE_DEGREES, 90)
-        vmg_segments = filtered_upwind[filtered_upwind['angle_to_wind'] <= max_angle_threshold]
-        
-        # Return the indices of segments used in VMG
-        return vmg_segments.index.tolist()
-        
-    except Exception as e:
-        logger.error(f"Error identifying VMG segments: {e}")
-        return []
+# DEPRECATED: This function is no longer used - VMG segment IDs now come from backend
+# def _identify_vmg_segments(segments: pd.DataFrame) -> list:
+#     """Deprecated - VMG segment IDs now provided by backend analysis"""
+#     return []
 
 
 def _count_vmg_segments(segments: pd.DataFrame) -> dict:
     """
-    Count how many segments are used in VMG calculation.
+    Count how many segments are used in VMG calculation using backend data.
     
     Returns dict with 'used' and 'total' upwind segment counts.
     """
@@ -120,11 +70,15 @@ def _count_vmg_segments(segments: pd.DataFrame) -> dict:
         if upwind_segments.empty:
             return None
         
-        # Get VMG segments
-        vmg_indices = _identify_vmg_segments(segments)
+        # Get VMG segment IDs from analysis result
+        analysis_result = st.session_state.get('analysis_result')
+        if analysis_result and hasattr(analysis_result, 'vmg_segment_ids'):
+            vmg_count = len(analysis_result.vmg_segment_ids)
+        else:
+            vmg_count = 0
         
         return {
-            'used': len(vmg_indices),
+            'used': vmg_count,
             'total': len(upwind_segments)
         }
         
@@ -212,6 +166,9 @@ def recalculate_segments(params_changed=None, override_wind_direction=None):
             # IMPORTANT: Recalculate angle_to_wind with override wind direction
             segments_with_override = analyze_wind_angles(analysis_result.segments, override_wind_direction)
             st.session_state.track_stretches = segments_with_override
+            
+            # Store the full analysis result for VMG segment access
+            st.session_state.analysis_result = analysis_result
         else:
             # Normal case: store refined wind and show refinement message if significant change
             st.session_state.refined_wind_direction = analysis_result.refined_wind
@@ -223,6 +180,9 @@ def recalculate_segments(params_changed=None, override_wind_direction=None):
             
             # Update session state with processed segments (already have correct angle_to_wind)
             st.session_state.track_stretches = analysis_result.segments
+        
+        # Store the full analysis result for VMG segment access
+        st.session_state.analysis_result = analysis_result
         
         logger.info(f"Successfully recalculated {len(analysis_result.segments)} stretches using shared service")
         return True
@@ -468,10 +428,16 @@ def _display_original_map(track_data: pd.DataFrame, segments: pd.DataFrame, show
             segments['speed'] = segments['avg_speed_knots']
         
         
-        # If VMG highlighting is requested, identify VMG segments
+        # If VMG highlighting is requested, use VMG segments from analysis result
         vmg_segments_list = None
         if show_vmg_segments:
-            vmg_segments_list = _identify_vmg_segments(segments)
+            # Get VMG segment IDs from the current analysis result
+            analysis_result = st.session_state.get('analysis_result')
+            if analysis_result and hasattr(analysis_result, 'vmg_segment_ids'):
+                vmg_segments_list = analysis_result.vmg_segment_ids
+            else:
+                # No VMG segments available if analysis result not found
+                vmg_segments_list = []
         
         # Call the original display function with VMG highlighting
         display_track_map(track_data, segments, wind_direction, vmg_segments=vmg_segments_list)

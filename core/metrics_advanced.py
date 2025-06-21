@@ -81,8 +81,9 @@ def calculate_segment_quality_score(segments: pd.DataFrame) -> pd.Series:
 def calculate_vmg_upwind(
     upwind_segments: pd.DataFrame,
     angle_range: float = DEFAULT_VMG_ANGLE_RANGE_DEGREES,
-    min_segment_distance: float = DEFAULT_MIN_SEGMENT_DISTANCE_METERS
-) -> Optional[float]:
+    min_segment_distance: float = DEFAULT_MIN_SEGMENT_DISTANCE_METERS,
+    return_segment_ids: bool = False
+) -> Union[Optional[float], Tuple[Optional[float], List[int]]]:
     """
     Calculate improved VMG upwind with distance weighting.
     
@@ -96,14 +97,17 @@ def calculate_vmg_upwind(
         upwind_segments: DataFrame with upwind sailing segments
         angle_range: Range around best angle to include (in degrees)
         min_segment_distance: Minimum segment distance to consider (in meters)
+        return_segment_ids: If True, returns tuple (vmg, segment_ids) instead of just vmg
     
     Returns:
         float: Distance-weighted VMG upwind or None if insufficient data
+        OR Tuple[float, List[int]]: (VMG, list of segment IDs) if return_segment_ids=True
     """
     upwind_vmg = None
+    vmg_segment_ids = []
     
     if upwind_segments.empty:
-        return None
+        return (None, []) if return_segment_ids else None
     
     try:
         # Step 1: Filter out suspicious segments first
@@ -171,11 +175,20 @@ def calculate_vmg_upwind(
                 total_distance = angle_filtered['distance'].sum()
                 if total_distance > 0:
                     upwind_vmg = np.average(vmg_values, weights=distance_weights)
+                    # Store the segment IDs that were used in the calculation
+                    # Use the 'id' column if available, otherwise use index
+                    if 'id' in angle_filtered.columns:
+                        vmg_segment_ids = angle_filtered['id'].tolist()
+                    else:
+                        vmg_segment_ids = angle_filtered.index.tolist()
                     logger.info(f"Calculated VMG upwind: {upwind_vmg:.2f} knots (from {len(angle_filtered)} segments)")
+                    logger.debug(f"VMG segment IDs: {vmg_segment_ids}")
     
     except Exception as e:
         logger.error(f"Error calculating upwind VMG: {e}")
     
+    if return_segment_ids:
+        return upwind_vmg, vmg_segment_ids
     return upwind_vmg
 
 def calculate_vmg_downwind(

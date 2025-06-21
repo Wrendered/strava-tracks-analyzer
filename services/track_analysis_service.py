@@ -61,10 +61,11 @@ class TrackAnalysisResult:
         self.upwind_segments = self.segments[self.segments.get('direction', '').str.lower() == 'upwind'] if 'direction' in self.segments.columns else pd.DataFrame()
         self.downwind_segments = self.segments[self.segments.get('direction', '').str.lower() == 'downwind'] if 'direction' in self.segments.columns else pd.DataFrame()
         
-        # Calculate VMG
+        # Calculate VMG with segment IDs
         self.vmg_upwind = None
+        self.vmg_segment_ids = []
         if not self.upwind_segments.empty:
-            self.vmg_upwind = calculate_vmg_upwind(self.upwind_segments)
+            self.vmg_upwind, self.vmg_segment_ids = calculate_vmg_upwind(self.upwind_segments, return_segment_ids=True)
         
         # Get best angles
         self.best_port_angle = None

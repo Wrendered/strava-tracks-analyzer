@@ -78,6 +78,7 @@ class PerformanceMetrics(BaseModel):
     vmg_downwind: Optional[float]
     port_tack_count: int
     starboard_tack_count: int
+    vmg_segment_ids: List[int]
 
 
 class TrackAnalysisResponse(BaseModel):
@@ -193,8 +194,11 @@ async def analyze_track(
         starboard_tack_count = len(result.segments[result.segments.get('tack', '') == 'Starboard']) if 'tack' in result.segments.columns else 0
         
         # Prepare response
+        # Add index as 'id' column for segments to ensure proper ID matching
+        segments_with_id = result.segments.copy()
+        segments_with_id['id'] = segments_with_id.index
         response = TrackAnalysisResponse(
-            segments=[segment.to_dict() for _, segment in result.segments.iterrows()],
+            segments=[segment.to_dict() for _, segment in segments_with_id.iterrows()],
             wind_estimate=WindEstimateResponse(
                 direction=result.refined_wind,
                 confidence=result.wind_confidence,
@@ -211,7 +215,8 @@ async def analyze_track(
                 vmg_upwind=result.vmg_upwind,
                 vmg_downwind=None,  # Not calculated in current implementation
                 port_tack_count=port_tack_count,
-                starboard_tack_count=starboard_tack_count
+                starboard_tack_count=starboard_tack_count,
+                vmg_segment_ids=result.vmg_segment_ids
             ),
             track_summary={
                 'total_distance': float(result.total_distance),
