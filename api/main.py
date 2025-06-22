@@ -34,9 +34,16 @@ app = FastAPI(
 # Add CORS middleware for frontend access
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, specify your Next.js domain
+    allow_origins=[
+        "http://localhost:3000",  # Next.js dev server
+        "http://localhost:3001",  # Next.js dev server (alt port)
+        "http://localhost:3002",  # Next.js dev server (alt port)
+        "https://foil-lab-web.vercel.app",  # Production frontend
+        "https://foil-lab.vercel.app",  # Alternative production domain
+        "http://localhost:8501",  # Streamlit dev (if needed)
+    ],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -163,11 +170,24 @@ async def analyze_track(
     """
     try:
         # Validate file type
-        if not file.filename.endswith('.gpx'):
-            raise HTTPException(status_code=400, detail="File must be a GPX file")
+        if not file.filename or not file.filename.lower().endswith(('.gpx', '.GPX')):
+            raise HTTPException(status_code=400, detail="Only GPX files are allowed")
         
         # Read file content
         content = await file.read()
+        
+        # Validate file size (50MB limit for prototype)
+        max_size = 50 * 1024 * 1024  # 50MB in bytes
+        if len(content) > max_size:
+            raise HTTPException(
+                status_code=413, 
+                detail=f"File too large. Maximum size is 50MB, received {len(content) / 1024 / 1024:.1f}MB"
+            )
+        
+        # Validate minimum file size (empty files)
+        if len(content) < 100:  # Minimum reasonable GPX file size
+            raise HTTPException(status_code=400, detail="File appears to be empty or corrupted")
+        
         file_obj = io.BytesIO(content)
         
         # Load GPX data
