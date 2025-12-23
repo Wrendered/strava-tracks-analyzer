@@ -1,6 +1,6 @@
 """
-Framework adapters for state management.
+Framework adapters package.
 
-This package contains implementations of state management interfaces
-for different UI frameworks.
+This package is now simplified - state management is no longer needed
+as the API is stateless (each request is independent).
 """

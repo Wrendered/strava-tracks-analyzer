@@ -4,7 +4,7 @@ Test our wind direction estimation on the sample data where we know the true win
 """
 import os
 import pandas as pd
-from utils.gpx_parser import load_gpx_from_path
+from core.gpx import load_gpx_from_path
 from utils.analysis import find_consistent_angle_stretches, estimate_wind_direction
 
 def test_wind_estimation():

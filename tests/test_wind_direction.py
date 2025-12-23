@@ -14,7 +14,7 @@ import pandas as pd
 import numpy as np
 import logging
 import matplotlib.pyplot as plt
-from utils.gpx_parser import load_gpx_from_path
+from core.gpx import load_gpx_from_path
 from utils.analysis import find_consistent_angle_stretches, analyze_wind_angles, estimate_wind_direction
 from core.wind.algorithms import estimate_wind_direction_iterative
 

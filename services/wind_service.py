@@ -1,19 +1,18 @@
 """
 Wind analysis service.
 
-This module provides business logic for wind direction estimation and related calculations,
-separating these concerns from UI components.
+This module provides business logic for wind direction estimation and VMG calculations,
+used by the API backend.
 """
 
 import pandas as pd
 import numpy as np
 import logging
 import math
-from typing import Dict, List, Optional, Tuple, Union, Any
+from typing import Optional
 from dataclasses import dataclass
 
-from services.state import StateServiceRegistry, WindStateService, SegmentStateService
-from core.wind.factory import estimate_wind_direction_factory, WindEstimationParams, WindEstimationFactory
+from core.wind.factory import estimate_wind_direction_factory, WindEstimationParams
 from core.wind.models import WindEstimate
 from core.metrics_advanced import (
     calculate_vmg_upwind,
@@ -30,6 +29,7 @@ DEFAULT_VMG_ANGLE_RANGE = 20       # Range around best angle to include for VMG 
 
 logger = logging.getLogger(__name__)
 
+
 @dataclass
 class WindAnalysisParams:
     """Parameters for wind analysis."""
@@ -42,114 +42,46 @@ class WindAnalysisParams:
 class WindService:
     """
     Service for wind analysis and related calculations.
-    
+
     This class centralizes the business logic for wind direction estimation,
     VMG calculations, and other wind-related functionality.
     """
-    
-    def __init__(self, 
-                 wind_state: Optional[WindStateService] = None,
-                 segment_state: Optional[SegmentStateService] = None):
-        """
-        Initialize WindService with optional state services.
-        
-        Args:
-            wind_state: Wind state service (uses registry if None)
-            segment_state: Segment state service (uses registry if None)
-        """
-        self._wind_state = wind_state or StateServiceRegistry.get_wind_service()
-        self._segment_state = segment_state or StateServiceRegistry.get_segment_service()
-    
-    def update_wind_direction(self, new_wind_direction: float, recalculate_stretches: bool = True) -> bool:
-        """
-        Update wind direction and optionally recalculate segments.
-        
-        Args:
-            new_wind_direction: The new wind direction to set
-            recalculate_stretches: Whether to recalculate stretches with the new wind direction
-            
-        Returns:
-            bool: True if update was successful, False otherwise
-        """
-        # Import directly from the core.segments package
-        from core.calculations import analyze_wind_angles
-        from services.segment_service import SegmentService
-        
-        # Store the previous wind direction for logging
-        prev_wind = self._wind_state.get_wind_direction()
-        
-        # Update the wind direction in session state
-        self._wind_state.set_wind_direction(new_wind_direction)
-        
-        # Log the change
-        if prev_wind is not None and prev_wind != new_wind_direction:
-            logger.info(f"Wind direction updated: {prev_wind}° → {new_wind_direction}°")
-        else:
-            logger.info(f"Wind direction set to: {new_wind_direction}°")
-        
-        # If we don't need to recalculate stretches or don't have any, we're done
-        track_stretches: Optional[pd.DataFrame] = self._segment_state.get_track_stretches()
-        if not recalculate_stretches or track_stretches is None:
-            return True
-        
-        # If we have track data, use the segment service to recalculate
-        track_data: Optional[pd.DataFrame] = self._segment_state.get_track_data()
-        if track_data is not None:
-            return SegmentService.recalculate_segments("wind direction")
-        
-        # Fallback: try to update existing stretches directly
-        try:
-            recalculated = analyze_wind_angles(track_stretches, new_wind_direction)
-            self._segment_state.set_track_stretches(recalculated)
-            logger.info(f"Updated existing stretches with wind direction {new_wind_direction}°")
-            return True
-        except Exception as e:
-            logger.error(f"Error updating existing stretches: {e}")
-            return False
-    
+
     def estimate_wind_direction(
         self,
         segments: pd.DataFrame,
         params: Optional[WindAnalysisParams] = None,
-        method: str = "weighted"
+        method: str = "iterative"
     ) -> WindEstimate:
         """
         Estimate wind direction from segments using the specified method.
-        
+
         Args:
             segments: DataFrame with segments
             params: Parameters for wind analysis, or None to use defaults
-            method: Estimation method ("weighted", "iterative", or "basic")
-            
+            method: Estimation method ("iterative", "weighted", or "basic")
+
         Returns:
             WindEstimate: Object with estimated wind direction and confidence
         """
         if params is None:
-            segment_params = self._segment_state.get_segment_parameters()
-            params = WindAnalysisParams(
-                initial_wind_direction=self._wind_state.get_wind_direction(),
-                suspicious_angle_threshold=segment_params.get(
-                    'suspicious_angle_threshold', DEFAULT_SUSPICIOUS_ANGLE_THRESHOLD),
-                min_segment_distance=DEFAULT_MIN_SEGMENT_DISTANCE,
-                vmg_angle_range=DEFAULT_VMG_ANGLE_RANGE
-            )
-        
-        # Use the appropriate estimation method
-        # Use factory pattern for all wind estimation
+            params = WindAnalysisParams()
+
+        # Use factory pattern for wind estimation
         wind_params = WindEstimationParams(
             suspicious_angle_threshold=params.suspicious_angle_threshold,
             min_segment_distance=params.min_segment_distance
         )
-        
+
         result = estimate_wind_direction_factory(
             segments.copy(),
             initial_wind=params.initial_wind_direction,
             method=method,
             params=wind_params
         )
-        
+
         return result
-    
+
     @staticmethod
     def calculate_vmg_upwind(
         upwind_segments: pd.DataFrame,
@@ -157,27 +89,23 @@ class WindService:
     ) -> Optional[float]:
         """
         Calculate VMG (velocity made good) upwind.
-        
+
         Args:
             upwind_segments: DataFrame with upwind segments
             params: Parameters for VMG calculation, or None to use defaults
-            
+
         Returns:
             float: VMG upwind in knots, or None if calculation failed
         """
         if params is None:
-            params = WindAnalysisParams(
-                min_segment_distance=DEFAULT_MIN_SEGMENT_DISTANCE,
-                vmg_angle_range=DEFAULT_VMG_ANGLE_RANGE
-            )
-        
-        # Use the advanced weighted algorithm
+            params = WindAnalysisParams()
+
         return calculate_vmg_upwind(
             upwind_segments,
             angle_range=params.vmg_angle_range,
             min_segment_distance=params.min_segment_distance
         )
-    
+
     @staticmethod
     def calculate_vmg_downwind(
         downwind_segments: pd.DataFrame,
@@ -185,100 +113,45 @@ class WindService:
     ) -> Optional[float]:
         """
         Calculate VMG (velocity made good) downwind.
-        
+
         Args:
             downwind_segments: DataFrame with downwind segments
             params: Parameters for VMG calculation, or None to use defaults
-            
+
         Returns:
             float: VMG downwind in knots, or None if calculation failed
         """
         if params is None:
-            params = WindAnalysisParams(
-                min_segment_distance=DEFAULT_MIN_SEGMENT_DISTANCE,
-                vmg_angle_range=DEFAULT_VMG_ANGLE_RANGE
-            )
-        
-        # Use the advanced weighted algorithm
+            params = WindAnalysisParams()
+
         return calculate_vmg_downwind(
             downwind_segments,
             angle_range=params.vmg_angle_range,
             min_segment_distance=params.min_segment_distance
         )
-    
+
     @staticmethod
     def calculate_fallback_vmg_upwind(best_port: pd.Series, best_starboard: pd.Series) -> float:
         """
         Calculate a fallback VMG upwind when advanced algorithm cannot be used.
-        
+
         Args:
             best_port: Best port tack segment
             best_starboard: Best starboard tack segment
-            
+
         Returns:
             float: Fallback VMG upwind in knots
         """
-        # Average the angles
         pointing_power = (best_port['angle_to_wind'] + best_starboard['angle_to_wind']) / 2
-        
-        # Average speed
         avg_upwind_speed = (best_port['speed'] + best_starboard['speed']) / 2
-        
-        # Calculate upwind progress speed
         return avg_upwind_speed * math.cos(math.radians(pointing_power))
-    
-    @staticmethod
-    def get_angle_difference(best_port: pd.Series, best_starboard: pd.Series) -> float:
-        """
-        Calculate the difference between port and starboard angles.
-        
-        Args:
-            best_port: Best port tack segment
-            best_starboard: Best starboard tack segment
-            
-        Returns:
-            float: Absolute angle difference in degrees
-        """
-        return abs(best_port['angle_to_wind'] - best_starboard['angle_to_wind'])
-    
-    @staticmethod
-    def get_combined_angle(best_port: pd.Series, best_starboard: pd.Series) -> float:
-        """
-        Calculate the combined angle from port and starboard.
-        
-        Args:
-            best_port: Best port tack segment
-            best_starboard: Best starboard tack segment
-            
-        Returns:
-            float: Combined angle in degrees
-        """
-        return (best_port['angle_to_wind'] + best_starboard['angle_to_wind']) / 2
 
 
-# Factory function for backward compatibility
 def get_wind_service() -> WindService:
     """
-    Get a WindService instance with injected dependencies.
-    
+    Get a WindService instance.
+
     Returns:
-        WindService instance with registered state services
+        WindService instance
     """
     return WindService()
-
-
-# Backward compatibility functions that use the factory
-def update_wind_direction(new_wind_direction: float, recalculate_stretches: bool = True) -> bool:
-    """Backward compatibility function for updating wind direction."""
-    service = get_wind_service()
-    return service.update_wind_direction(new_wind_direction, recalculate_stretches)
-
-
-def estimate_wind_direction(
-    segments: pd.DataFrame,
-    params: Optional[WindAnalysisParams] = None,
-    method: str = "weighted"
-) -> WindEstimate:
-    """Backward compatibility function for estimating wind direction."""
-    service = get_wind_service()
-    return service.estimate_wind_direction(segments, params, method)

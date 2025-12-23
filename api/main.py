@@ -39,18 +39,13 @@ app.add_middleware(
         "http://localhost:3001",  # Next.js dev server (alt port)
         "http://localhost:3002",  # Next.js dev server (alt port)
         "http://localhost:3003",  # Next.js dev server (alt port)
-        "https://foil-lab-web.vercel.app",  # Production frontend
+        "https://foil-lab-web.vercel.app",  # Production frontend (Vercel)
         "https://foil-lab.vercel.app",  # Alternative production domain
-        "http://localhost:8501",  # Streamlit dev (if needed)
     ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
-
-# Initialize state management with memory adapters (no UI state needed!)
-from adapters.memory_state import register_memory_adapters
-register_memory_adapters()
 
 # Import our services
 from services.track_analysis_service import analyze_track_data, TrackAnalysisResult
