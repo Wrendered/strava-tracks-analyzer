@@ -1,162 +1,102 @@
-# Foil Lab - Wingfoil GPX Track Analyzer
+# Foil Lab Backend
 
-A Streamlit application for analyzing wingfoil sessions from Strava GPX tracks. Helps analyze your sailing performance and optimize wind angles.
+FastAPI backend for wingfoil/sailing GPS track analysis. Parses GPX files, detects sailing segments, estimates wind direction, and calculates performance metrics.
 
-> **Note**: See [the docs directory](docs/) for detailed documentation about the application architecture and features.
+**Frontend**: [foil-lab-web](https://github.com/Wrendered/foil-lab-web) (Next.js/React)
+
+**Live API**: https://strava-tracks-analyzer-production.up.railway.app
 
 ## Features
 
-### Track Analysis
-- Upload GPX files from Strava or other sources
-- Automatically detect consistent sailing angles and segments
-- Advanced wind direction estimation with iterative refinement
-- Separate port and starboard tack analysis with symmetry metrics
-- Interactive maps with color-coded segments and wind arrows
-- Polar performance diagrams showing speed vs angle relationships
-- Distance-weighted VMG (Velocity Made Good) calculations
-- Adaptive parameter scaling for long tracks to prevent over-segmentation
+- **GPX Parsing**: Load and process GPS tracks from Strava or other sources
+- **Segment Detection**: Find consistent sailing stretches with stable bearing
+- **Wind Estimation**: Iterative algorithm that balances port/starboard tack angles
+- **Performance Metrics**: VMG (Velocity Made Good), upwind angles, speeds
+- **Gear Comparison**: AI-powered analysis of different equipment setups
 
-### Gear Comparison  
-- Bulk upload and analysis of multiple tracks
-- Side-by-side comparison of different gear setups
-- Export individual sessions from Track Analysis page
-- Unified analysis pipeline ensures consistent results
-- Clean comparison table with key performance metrics
-- CSV export for further analysis
+## Quick Start
 
-### Advanced Analytics
-- Quality-weighted segment detection filters GPS noise
-- Wind confidence levels (High/Medium/Low/None) 
-- Suspicious angle detection and filtering
-- Distance-weighted performance calculations
-- Real-time parameter adjustment with immediate feedback
+```bash
+# Setup
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
 
-## Recent Improvements (2024)
+# Run development server
+python run_api.py
 
-- **Unified Analysis Pipeline**: Created shared analysis service ensuring identical calculations between main page and bulk upload
-- **Fixed VMG Discrepancy**: Resolved calculation differences between individual and bulk analysis
-- **Improved Comparison Table**: Now shows metrics exactly matching the main page display
-- **Removed Legacy Metrics**: Deprecated "upwind progress" in favor of sophisticated VMG calculations
-- **Streamlined UI**: Removed redundant detailed comparison section for cleaner interface
-- **Enhanced Wind Estimation**: Iterative algorithm refines user's initial wind estimate
-- **Parameter Consistency**: Both analysis methods use identical parameters from session state
+# API available at http://localhost:8000
+# Docs at http://localhost:8000/docs
+```
 
-## Installation
+## API Endpoints
 
-1. Clone this repository
-2. Create and activate a virtual environment:
-   ```
-   # Create virtual environment (already included in the repo)
-   python -m venv venv
-   
-   # Activate the virtual environment
-   # On macOS/Linux:
-   source venv/bin/activate
-   # On Windows:
-   venv\Scripts\activate
-   ```
-3. Install requirements in the virtual environment: `pip install -r requirements.txt`
-4. Run the app with the virtual environment activated: `streamlit run app.py`
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/health` | GET | Health check |
+| `/api/config` | GET | Default parameters and ranges |
+| `/api/analyze-track` | POST | Analyze GPX file |
+| `/api/estimate-wind` | POST | Standalone wind estimation |
 
-> **Note**: Always make sure to activate the virtual environment before running the application.
+### Example: Analyze a Track
 
-## Usage
-
-1. Upload a GPX file from a wingfoil session
-2. Set the wind direction or use auto-detection
-3. Adjust analysis parameters as needed
-4. View the results and optimize your technique
-5. Export sessions to the gear comparison page to analyze different setups
-
-## AI-Powered Gear Comparison
-
-The app includes AI-powered gear comparison using Claude from Anthropic:
-
-1. Save multiple gear sessions from the Track Analysis page
-2. Navigate to the Gear Comparison tab
-3. Select the gear setups you want to compare
-4. Click "Generate AI Analysis" to receive detailed insights
-
-You'll need an Anthropic API key to use this feature. You can set it two ways:
-- Environment variable: `export ANTHROPIC_API_KEY=your_key_here`
-- Or enter it directly in the app when prompted
-
-## Long Track Analysis
-
-For very long tracks (3+ hours) or tracks with many tacks, the application now automatically:
-
-1. Detects over-segmentation based on track characteristics
-2. Dynamically adjusts parameters for optimal segment detection
-3. Shows quality metrics and provides the ability to revert to original parameters
-4. Scales min_distance, min_time, and angle_tolerance proportionally
-
-This ensures consistent analysis quality regardless of track duration or complexity.
-
-## Dependencies
-
-- streamlit
-- pandas
-- numpy
-- gpxpy
-- matplotlib
-- folium
-- scikit-learn
-- geopy
-- anthropic
+```bash
+curl -X POST "http://localhost:8000/api/analyze-track" \
+  -F "file=@session.gpx" \
+  -F "wind_direction=270" \
+  -F "min_speed=5"
+```
 
 ## Project Structure
 
-The project follows a clean architecture with clear separation of concerns:
-
 ```
-strava-tracks-analyzer/
-├── app.py                        # Main Streamlit entry point
-├── config/                       # Configuration files
-├── core/                         # Core business logic 
-│   ├── gpx.py                    # GPX file parsing
-│   ├── metrics.py                # Track metrics calculations
-│   ├── metrics_advanced.py       # Advanced VMG and quality calculations
-│   ├── segments.py               # Segment detection and analysis
-│   └── wind/                     # Wind direction analysis
-├── services/                     # Business services
-│   └── track_analysis_service.py # Unified analysis pipeline
-├── ui/                           # UI components and pages
-│   ├── pages/                    # Main UI pages
-│   └── components/               # Reusable UI components
-└── utils/                        # Utility functions
-    └── parameter_scaling.py      # Adaptive parameter scaling
+├── api/main.py              # FastAPI endpoints
+├── core/                    # Core algorithms
+│   ├── wind/algorithms.py   # Wind estimation (iterative)
+│   ├── segments/            # Track segmentation
+│   ├── gpx.py               # GPX parsing
+│   └── metrics*.py          # Performance calculations
+├── services/                # Business logic layer
+├── config/settings.py       # Default parameters
+├── tests/                   # Test suite
+└── docs/                    # Documentation
 ```
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for more details on the project structure.
+## Wind Estimation
 
-## Changelog
+The iterative algorithm estimates wind direction by:
 
-### Version 1.2.1 (Latest) - June 8, 2025
-- **COMPLETED**: Full unification of analysis pipeline - main page, bulk upload, and export all use shared service
-- **FIXED**: Export to comparison now shows correct Avg Speed and Avg Upwind Angle (was showing N/A)
-- **FIXED**: Circular import issues in core.wind module
-- **REFACTORED**: Removed 100+ lines of duplicate analysis code from main page
-- **ADDED**: analyze_track_data() function for in-memory track processing
-- **IMPROVED**: True single source of truth for all track analysis
+1. Classifying segments as port/starboard tack
+2. Calculating median upwind angles for each tack
+3. Adjusting wind to balance the angles
+4. **Reclassifying segments** with the new wind estimate
+5. Repeating until convergence
 
-### Version 1.2.0 - June 7, 2025
-- **MAJOR**: Created unified analysis pipeline for consistency between pages
-- **FIXED**: VMG calculation discrepancy between main page and bulk upload
-- **IMPROVED**: Comparison table now shows identical metrics to main page
-- **REMOVED**: Deprecated "upwind progress" metric from UI
-- **STREAMLINED**: Removed redundant detailed comparison section
-- **ENHANCED**: Wind direction estimation with iterative refinement algorithm
+This fixes the common bug where tacks are classified once and never updated as the wind estimate changes.
 
-### Version 1.1.0  
-- **NEW**: Bulk upload functionality for gear comparison
-- **IMPROVED**: Advanced wind direction estimation with confidence levels
-- **ENHANCED**: Distance-weighted VMG calculations  
-- **ADDED**: Adaptive parameter scaling for long tracks
-- **FIXED**: Over-segmentation issues on complex tracks
+## Deployment
 
-### Version 1.0.0
-- Initial release with basic track analysis
-- GPX file upload and parsing
-- Segment detection and wind angle calculations
-- Interactive maps and polar diagrams
-- Basic gear comparison functionality
+Deployed on Railway, auto-deploys from `main` branch.
+
+```bash
+# Environment variables (Railway dashboard)
+# None required for basic operation
+# ANTHROPIC_API_KEY - for AI gear comparison features
+```
+
+## Development
+
+```bash
+# Run tests
+python -m pytest tests/
+
+# Type check
+mypy core/ services/ api/
+
+# Lint
+ruff check .
+```
+
+## License
+
+MIT
